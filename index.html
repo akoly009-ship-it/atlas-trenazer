@@ -1,0 +1,967 @@
+<title>Atlas Trenažér</title>
+<script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Work+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+  :root{
+    --paper:#eae6d8;
+    --paper-raised:#f4f1e6;
+    --ink:#1c2b2e;
+    --ink-soft:#4a5c5c;
+    --line:#c9c1a8;
+    --brass:#a8672c;
+    --brass-deep:#7d4a1c;
+    --ok:#3f7d54;
+    --ok-fill:#bfe0c8;
+    --bad:#a8402f;
+    --bad-fill:#eec3ba;
+    --map-fill:#f7f4ea;
+    --map-fill-dim:#eeeadb;
+    --map-stroke:#8a8264;
+    --map-hover:#f1e2b8;
+    --panel-shadow:0 10px 30px -12px rgba(28,43,46,.35);
+    --focus:#3f7d54;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --paper:#101b1c;
+      --paper-raised:#162424;
+      --ink:#e9e6d8;
+      --ink-soft:#9fb0ac;
+      --line:#2c3b3a;
+      --brass:#d99a52;
+      --brass-deep:#e9b46f;
+      --ok:#6fbf8a;
+      --ok-fill:#1f3a2a;
+      --bad:#e08b78;
+      --bad-fill:#3c2420;
+      --map-fill:#1a2a2a;
+      --map-fill-dim:#152121;
+      --map-stroke:#4a5c58;
+      --map-hover:#334a3c;
+      --panel-shadow:0 10px 30px -12px rgba(0,0,0,.6);
+    }
+  }
+  :root[data-theme="dark"]{
+    --paper:#101b1c;
+    --paper-raised:#162424;
+    --ink:#e9e6d8;
+    --ink-soft:#9fb0ac;
+    --line:#2c3b3a;
+    --brass:#d99a52;
+    --brass-deep:#e9b46f;
+    --ok:#6fbf8a;
+    --ok-fill:#1f3a2a;
+    --bad:#e08b78;
+    --bad-fill:#3c2420;
+    --map-fill:#1a2a2a;
+    --map-fill-dim:#152121;
+    --map-stroke:#4a5c58;
+    --map-hover:#334a3c;
+    --panel-shadow:0 10px 30px -12px rgba(0,0,0,.6);
+  }
+
+  *{box-sizing:border-box;}
+  [hidden]{display:none!important;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:"Work Sans",system-ui,sans-serif;
+    display:flex;
+    flex-direction:column;
+    overflow:hidden;
+  }
+
+  .app{
+    display:flex;
+    flex-direction:column;
+    height:100%;
+    min-height:100%;
+  }
+
+  header.top{
+    flex:0 0 auto;
+    padding:calc(10px + env(safe-area-inset-top,0px)) 16px 10px;
+    background:var(--paper-raised);
+    border-bottom:1px solid var(--line);
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+  }
+  .brand{
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    gap:12px;
+    flex-wrap:wrap;
+  }
+  .brand h1{
+    font-family:"Fraunces",serif;
+    font-weight:600;
+    font-size:1.15rem;
+    margin:0;
+    letter-spacing:.01em;
+  }
+  .brand h1 em{
+    font-style:normal;
+    color:var(--brass-deep);
+  }
+  .score{
+    font-family:"IBM Plex Mono",monospace;
+    font-size:.72rem;
+    color:var(--ink-soft);
+    letter-spacing:.03em;
+  }
+
+  nav.modes{
+    display:flex;
+    gap:6px;
+    flex-wrap:wrap;
+  }
+  nav.modes button{
+    font:inherit;
+    font-family:"Work Sans",sans-serif;
+    font-size:.74rem;
+    font-weight:600;
+    letter-spacing:.02em;
+    padding:6px 11px;
+    border-radius:999px;
+    border:1px solid var(--line);
+    background:var(--paper);
+    color:var(--ink-soft);
+    cursor:pointer;
+    transition:background .15s,color .15s,border-color .15s;
+  }
+  nav.modes button:hover{border-color:var(--brass);}
+  nav.modes button.active{
+    background:var(--brass);
+    border-color:var(--brass);
+    color:#fff8ee;
+  }
+  nav.modes button:focus-visible, .ctrl-btn:focus-visible, .zoom-btn:focus-visible, input:focus-visible, .toggle:focus-visible{
+    outline:2px solid var(--focus);
+    outline-offset:2px;
+  }
+
+  .prompt-row{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    flex-wrap:wrap;
+  }
+  .prompt{
+    font-family:"Fraunces",serif;
+    font-size:clamp(1rem,3vw,1.3rem);
+    font-weight:600;
+    display:flex;
+    align-items:baseline;
+    gap:8px;
+    flex-wrap:wrap;
+  }
+  .prompt .target{color:var(--brass-deep);}
+  .subprompt{
+    font-size:.78rem;
+    color:var(--ink-soft);
+  }
+  .progress{
+    font-family:"IBM Plex Mono",monospace;
+    font-size:.72rem;
+    color:var(--ink-soft);
+    margin-left:auto;
+    white-space:nowrap;
+  }
+
+  .toggle-row{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    font-size:.72rem;
+    color:var(--ink-soft);
+  }
+  .toggle{
+    position:relative;
+    width:34px;
+    height:19px;
+    border-radius:999px;
+    background:var(--line);
+    border:none;
+    cursor:pointer;
+    flex:0 0 auto;
+  }
+  .toggle::after{
+    content:"";
+    position:absolute;
+    top:2px;left:2px;
+    width:15px;height:15px;
+    border-radius:50%;
+    background:var(--paper-raised);
+    transition:transform .15s;
+  }
+  .toggle.on{background:var(--brass);}
+  .toggle.on::after{transform:translateX(15px);}
+
+  main.stage{
+    position:relative;
+    flex:1 1 auto;
+    min-height:0;
+    background:var(--map-fill-dim);
+    overflow:hidden;
+  }
+  svg.map{
+    width:100%;
+    height:100%;
+    display:block;
+    touch-action:none;
+    cursor:grab;
+  }
+  svg.map:active{cursor:grabbing;}
+  path.land{
+    fill:var(--map-fill);
+    stroke:var(--map-stroke);
+    stroke-width:.5;
+    vector-effect:non-scaling-stroke;
+    transition:fill .12s;
+  }
+  path.land:hover{ fill:var(--map-hover); }
+  path.land.correct{ fill:var(--ok-fill); stroke:var(--ok); }
+  path.land.wrong{ fill:var(--bad-fill); stroke:var(--bad); }
+  path.land.revealed{ fill:var(--brass); stroke:var(--brass-deep); }
+  path.state{
+    fill:var(--map-fill);
+    stroke:var(--map-stroke);
+    stroke-width:.6;
+    vector-effect:non-scaling-stroke;
+    transition:fill .12s;
+  }
+  path.state:hover{ fill:var(--map-hover); }
+  path.state.correct{ fill:var(--ok-fill); stroke:var(--ok); }
+  path.state.wrong{ fill:var(--bad-fill); stroke:var(--bad); }
+  path.state.revealed{ fill:var(--brass); stroke:var(--brass-deep); }
+
+  .zoom-ctrls{
+    position:absolute;
+    right:12px;
+    bottom:calc(12px + env(safe-area-inset-bottom,0px));
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+    z-index:5;
+  }
+  .zoom-btn{
+    width:34px;height:34px;
+    border-radius:8px;
+    border:1px solid var(--line);
+    background:var(--paper-raised);
+    color:var(--ink);
+    font-size:1.1rem;
+    line-height:1;
+    cursor:pointer;
+    box-shadow:var(--panel-shadow);
+  }
+  .zoom-btn:hover{border-color:var(--brass);}
+
+  .tooltip{
+    position:absolute;
+    pointer-events:none;
+    background:var(--ink);
+    color:var(--paper);
+    font-family:"IBM Plex Mono",monospace;
+    font-size:.68rem;
+    padding:3px 7px;
+    border-radius:5px;
+    transform:translate(-50%,-130%);
+    white-space:nowrap;
+    z-index:6;
+    opacity:0;
+    transition:opacity .1s;
+  }
+  .tooltip.show{opacity:1;}
+
+  .answer-panel{
+    position:absolute;
+    left:50%;
+    bottom:calc(14px + env(safe-area-inset-bottom,0px));
+    transform:translateX(-50%);
+    width:min(420px,calc(100% - 28px));
+    background:var(--paper-raised);
+    border:1px solid var(--line);
+    border-radius:14px;
+    box-shadow:var(--panel-shadow);
+    padding:12px 14px;
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+    z-index:5;
+  }
+  .answer-panel[hidden]{display:none;}
+  .answer-panel .label{
+    font-size:.7rem;
+    text-transform:uppercase;
+    letter-spacing:.06em;
+    color:var(--ink-soft);
+  }
+  .answer-row{
+    display:flex;
+    gap:8px;
+  }
+  .answer-row input{
+    flex:1;
+    font:inherit;
+    font-family:"Work Sans",sans-serif;
+    font-size:.95rem;
+    padding:9px 11px;
+    border-radius:9px;
+    border:1px solid var(--line);
+    background:var(--paper);
+    color:var(--ink);
+  }
+  .ctrl-btn{
+    font:inherit;
+    font-weight:600;
+    font-size:.85rem;
+    padding:9px 15px;
+    border-radius:9px;
+    border:1px solid var(--brass);
+    background:var(--brass);
+    color:#fff8ee;
+    cursor:pointer;
+    white-space:nowrap;
+  }
+  .ctrl-btn.ghost{
+    background:transparent;
+    color:var(--brass-deep);
+  }
+  .ctrl-btn:disabled{opacity:.45;cursor:default;}
+  .feedback{
+    font-size:.85rem;
+    font-weight:600;
+    display:none;
+    align-items:center;
+    gap:6px;
+  }
+  .feedback.show{display:flex;}
+  .feedback.ok{color:var(--ok);}
+  .feedback.bad{color:var(--bad);}
+  .feedback .answer-reveal{
+    font-weight:500;
+    color:var(--ink-soft);
+  }
+
+  .side-info{
+    position:absolute;
+    top:12px;
+    left:12px;
+    max-width:min(260px,calc(100% - 24px));
+    background:var(--paper-raised);
+    border:1px solid var(--line);
+    border-radius:12px;
+    box-shadow:var(--panel-shadow);
+    padding:11px 13px;
+    font-size:.78rem;
+    color:var(--ink-soft);
+    z-index:5;
+  }
+  .side-info[hidden]{display:none;}
+  .side-info h3{
+    margin:0 0 6px;
+    font-family:"Fraunces",serif;
+    font-size:.95rem;
+    color:var(--ink);
+    font-weight:600;
+  }
+  .side-info ul{
+    margin:6px 0 0;
+    padding-left:18px;
+  }
+  .side-info li{margin-bottom:2px;}
+
+  .end-card{
+    position:absolute;
+    inset:0;
+    display:none;
+    align-items:center;
+    justify-content:center;
+    background:color-mix(in srgb, var(--paper) 88%, transparent);
+    z-index:8;
+    padding:20px;
+  }
+  .end-card.show{display:flex;}
+  .end-card .box{
+    background:var(--paper-raised);
+    border:1px solid var(--line);
+    border-radius:16px;
+    box-shadow:var(--panel-shadow);
+    padding:22px 24px;
+    max-width:340px;
+    text-align:center;
+  }
+  .end-card h2{
+    font-family:"Fraunces",serif;
+    font-size:1.3rem;
+    margin:0 0 6px;
+  }
+  .end-card p{
+    font-size:.85rem;
+    color:var(--ink-soft);
+    margin:0 0 16px;
+  }
+</style>
+
+<div class="app">
+  <header class="top">
+    <div class="brand">
+      <h1>Atlas <em>Trenažér</em></h1>
+      <span class="score" id="scoreLabel">skóre 0/0</span>
+    </div>
+    <nav class="modes" id="modeNav">
+      <button data-mode="capitals" class="active">13 · Hlavní města</button>
+      <button data-mode="africa">18 · Afrika</button>
+      <button data-mode="america">19 · Amerika</button>
+      <button data-mode="river">12 · Řeka USA</button>
+    </nav>
+    <div class="prompt-row">
+      <div class="prompt" id="promptText">Načítám mapu…</div>
+      <div class="progress" id="progressLabel"></div>
+    </div>
+    <div class="subprompt" id="subPrompt"></div>
+    <div class="toggle-row">
+      <button class="toggle on" id="hintToggle" role="switch" aria-checked="true" aria-label="Nápověda s názvy"></button>
+      <span>Nápověda: názvy při najetí myší</span>
+    </div>
+  </header>
+
+  <main class="stage">
+    <svg class="map" id="map"></svg>
+    <div class="tooltip" id="tooltip"></div>
+    <div class="zoom-ctrls">
+      <button class="zoom-btn" id="zoomIn" aria-label="Přiblížit">+</button>
+      <button class="zoom-btn" id="zoomOut" aria-label="Oddálit">−</button>
+      <button class="zoom-btn" id="zoomReset" aria-label="Reset pohledu">⟲</button>
+    </div>
+    <div class="side-info" id="sideInfo" hidden></div>
+    <div class="answer-panel" id="answerPanel" hidden>
+      <div class="label" id="answerLabel">Klikni na správný stát na mapě</div>
+      <div class="answer-row" id="answerRow" hidden>
+        <input type="text" id="answerInput" placeholder="Hlavní město…" autocomplete="off" spellcheck="false">
+        <button class="ctrl-btn" id="submitBtn">Ověřit</button>
+      </div>
+      <div class="answer-row" id="findRow" hidden style="justify-content:flex-end">
+        <button class="ctrl-btn ghost" id="revealBtn">Nevím – ukázat</button>
+      </div>
+      <div class="feedback" id="feedback"></div>
+      <div class="answer-row" id="nextRow" hidden style="justify-content:flex-end">
+        <button class="ctrl-btn" id="nextBtn">Další →</button>
+      </div>
+    </div>
+    <div class="end-card" id="endCard">
+      <div class="box">
+        <h2 id="endTitle">Hotovo!</h2>
+        <p id="endText"></p>
+        <button class="ctrl-btn" id="restartBtn">Zkusit znovu</button>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* ---------- data dictionaries ---------- */
+
+var CZ_NAMES = {
+  "Mexico":"Mexiko","Australia":"Austrálie","Brazil":"Brazílie","India":"Indie",
+  "United States of America":"USA","Sweden":"Švédsko","Canada":"Kanada","Germany":"Německo",
+  "Belgium":"Belgie","Croatia":"Chorvatsko","China":"Čína","Switzerland":"Švýcarsko",
+  "Japan":"Japonsko","Greece":"Řecko","Turkey":"Turecko","Hungary":"Maďarsko",
+  "Dem. Rep. Congo":"Zair (Kongo)","Honduras":"Honduras","Philippines":"Filipíny",
+  "Nigeria":"Nigérie","Malawi":"Malawi","Kuwait":"Kuvajt","Gabon":"Gabun",
+  "Lebanon":"Libanon","Angola":"Angola","Guyana":"Guyana","Guinea":"Guinea",
+  "Costa Rica":"Kostarika","Bangladesh":"Bangladéš","Sri Lanka":"Srí Lanka",
+  "Haiti":"Haiti","Panama":"Panama","Paraguay":"Paraguay","Suriname":"Surinam",
+  "Sierra Leone":"Sierra Leone"
+};
+
+var CAPITALS = [
+  {country:"Mexico", answers:["ciudad de mexico","mexico city","mexiko city"], display:"Ciudad de México"},
+  {country:"Australia", answers:["canberra"], display:"Canberra"},
+  {country:"Brazil", answers:["brasilia","brazilia"], display:"Brasília"},
+  {country:"India", answers:["nove dilli","dilli","delhi","new delhi"], display:"Nové Dillí"},
+  {country:"United States of America", answers:["washington","washington dc","washington d.c."], display:"Washington, D.C."},
+  {country:"Sweden", answers:["stockholm"], display:"Stockholm"},
+  {country:"Canada", answers:["ottawa"], display:"Ottawa"},
+  {country:"Germany", answers:["berlin"], display:"Berlín"},
+  {country:"Belgium", answers:["brusel","bruxelles","brussels"], display:"Brusel"},
+  {country:"Croatia", answers:["zahreb","zagreb"], display:"Záhřeb"},
+  {country:"China", answers:["peking","beijing"], display:"Peking"},
+  {country:"Switzerland", answers:["bern","berne"], display:"Bern"},
+  {country:"Japan", answers:["tokio","tokyo"], display:"Tokio"},
+  {country:"Greece", answers:["ateny","atheny","athens"], display:"Atény"},
+  {country:"Turkey", answers:["ankara"], display:"Ankara"},
+  {country:"Hungary", answers:["budapest","budapest"], display:"Budapešť"}
+];
+
+var AFRICA_POOL = ["Dem. Rep. Congo","Honduras","Philippines","Nigeria","Malawi","Kuwait","Gabon","Lebanon","Angola","Guyana","Guinea"];
+var AFRICA_NOT = ["Honduras","Philippines","Kuwait","Lebanon","Guyana"];
+
+var AMERICA_POOL = ["Costa Rica","Bangladesh","Sri Lanka","Haiti","Panama","Paraguay","Guyana","Guinea","Suriname","Sierra Leone"];
+var AMERICA_NOT = ["Bangladesh","Sri Lanka","Guinea","Sierra Leone"];
+
+var RIVER_STATES = ["Minnesota","Wisconsin","Iowa","Illinois","Missouri","Kentucky","Tennessee","Arkansas","Mississippi","Louisiana"];
+
+function normalize(s){
+  return (s||"").toString().trim().toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g,"")
+    .replace(/[.,]/g,"").replace(/\s+/g," ");
+}
+
+/* ---------- state ---------- */
+
+var mode = "capitals";
+var score = 0, total = 0;
+var svg = d3.select("#map");
+var gWorld = svg.append("g").attr("class","world-layer");
+var gStates = svg.append("g").attr("class","states-layer").style("display","none");
+var landPaths, statePaths;
+var projection, path, statesProjection, statesPath;
+var zoomBehavior;
+var width = 960, height = 520;
+var worldFeatures, statesFeatures;
+var hintOn = true;
+var activeTextChecker = null;
+
+/* generic "find it on the map" engine, shared by all 4 modes */
+var findQueue = [];
+var findIdx = 0;
+var findFound = 0, findRevealed = 0;
+var findLayer = "world";
+var findLocked = false;
+var findOnEachFound = null;
+var findOnDone = null;
+
+var promptText = document.getElementById("promptText");
+var subPrompt = document.getElementById("subPrompt");
+var progressLabel = document.getElementById("progressLabel");
+var scoreLabel = document.getElementById("scoreLabel");
+var answerPanel = document.getElementById("answerPanel");
+var answerLabel = document.getElementById("answerLabel");
+var answerRow = document.getElementById("answerRow");
+var answerInput = document.getElementById("answerInput");
+var submitBtn = document.getElementById("submitBtn");
+var findRow = document.getElementById("findRow");
+var revealBtn = document.getElementById("revealBtn");
+var feedback = document.getElementById("feedback");
+var nextRow = document.getElementById("nextRow");
+var nextBtn = document.getElementById("nextBtn");
+var sideInfo = document.getElementById("sideInfo");
+var tooltip = document.getElementById("tooltip");
+var endCard = document.getElementById("endCard");
+
+/* ---------- boot ---------- */
+
+function start(saved){
+  score = (saved && saved.score) || 0;
+  total = (saved && saved.total) || 0;
+  updateScore();
+
+  Promise.all([
+    fetch("countries-110m.json").then(function(r){return r.json();}),
+    fetch("states-10m.json").then(function(r){return r.json();})
+  ]).then(function(res){
+    var worldTopo = res[0], statesTopo = res[1];
+    worldFeatures = topojson.feature(worldTopo, worldTopo.objects.countries).features;
+    statesFeatures = topojson.feature(statesTopo, statesTopo.objects.states).features;
+    buildMap();
+    setMode("capitals");
+  }).catch(function(err){
+    promptText.textContent = "Chyba při načítání mapy.";
+    console.error(err);
+  });
+}
+
+function persist(){
+  try{
+    localStorage.setItem("atlas-trenazer-score", JSON.stringify({score:score,total:total}));
+    if(window.claude && window.claude.hot && window.claude.hot.snapshot){
+      window.claude.hot.snapshot({score:score,total:total});
+    }
+  }catch(e){}
+}
+
+function updateScore(){
+  scoreLabel.textContent = "skóre " + score + "/" + total;
+}
+
+/* ---------- map building ---------- */
+
+function buildMap(){
+  var vb = svg.node().getBoundingClientRect();
+  width = vb.width || 960;
+  height = vb.height || 520;
+  svg.attr("viewBox","0 0 "+width+" "+height);
+
+  projection = d3.geoNaturalEarth1();
+  var sphere = {type:"Sphere"};
+  var landOnly = {type:"FeatureCollection", features: worldFeatures.filter(function(f){return f.properties.name!=="Antarctica";})};
+  projection.fitExtent([[14,14],[width-14,height-14]], landOnly);
+  path = d3.geoPath(projection);
+
+  landPaths = gWorld.selectAll("path.land")
+    .data(worldFeatures.filter(function(f){return f.properties.name!=="Antarctica";}))
+    .enter().append("path")
+    .attr("class","land")
+    .attr("d", path)
+    .on("mousemove", onLandHover)
+    .on("mouseleave", hideTooltip)
+    .on("click", onLandClick);
+
+  statesProjection = d3.geoAlbersUsa();
+  statesProjection.fitExtent([[14,14],[width-14,height-14]], {type:"FeatureCollection", features: statesFeatures});
+  statesPath = d3.geoPath(statesProjection);
+
+  statePaths = gStates.selectAll("path.state")
+    .data(statesFeatures)
+    .enter().append("path")
+    .attr("class","state")
+    .attr("d", statesPath)
+    .on("mousemove", onStateHover)
+    .on("mouseleave", hideTooltip)
+    .on("click", onStateClick);
+
+  zoomBehavior = d3.zoom()
+    .scaleExtent([1,10])
+    .on("zoom", function(ev){
+      gWorld.attr("transform", ev.transform);
+      gStates.attr("transform", ev.transform);
+    });
+  svg.call(zoomBehavior);
+
+  document.getElementById("zoomIn").onclick = function(){ svg.transition().duration(200).call(zoomBehavior.scaleBy, 1.6); };
+  document.getElementById("zoomOut").onclick = function(){ svg.transition().duration(200).call(zoomBehavior.scaleBy, 0.625); };
+  document.getElementById("zoomReset").onclick = function(){ svg.transition().duration(250).call(zoomBehavior.transform, d3.zoomIdentity); };
+
+  window.addEventListener("resize", debounce(function(){
+    var box = svg.node().getBoundingClientRect();
+    width = box.width; height = box.height;
+    svg.attr("viewBox","0 0 "+width+" "+height);
+  }, 200));
+}
+
+function debounce(fn, ms){
+  var t;
+  return function(){ clearTimeout(t); var a=arguments; t=setTimeout(function(){fn.apply(null,a);}, ms); };
+}
+
+function zoomToBounds(bboxPath, feature, extraPad){
+  var b = bboxPath.bounds(feature);
+  var pad = extraPad || 40;
+  var dx = b[1][0]-b[0][0], dy = b[1][1]-b[0][1];
+  var x = (b[0][0]+b[1][0])/2, y=(b[0][1]+b[1][1])/2;
+  var scale = Math.max(1, Math.min(8, 0.9 / Math.max(dx/(width-pad), dy/(height-pad))));
+  var translate = [width/2 - scale*x, height/2 - scale*y];
+  svg.transition().duration(500).call(zoomBehavior.transform, d3.zoomIdentity.translate(translate[0],translate[1]).scale(scale));
+}
+
+/* ---------- tooltip ---------- */
+
+function onLandHover(ev, d){
+  if(!hintOn){ hideTooltip(); return; }
+  showTooltip(ev, CZ_NAMES[d.properties.name] || d.properties.name);
+}
+function onStateHover(ev, d){
+  if(!hintOn){ hideTooltip(); return; }
+  showTooltip(ev, d.properties.name);
+}
+function showTooltip(ev, text){
+  var box = svg.node().getBoundingClientRect();
+  tooltip.textContent = text;
+  tooltip.style.left = (ev.clientX - box.left) + "px";
+  tooltip.style.top = (ev.clientY - box.top) + "px";
+  tooltip.classList.add("show");
+}
+function hideTooltip(){ tooltip.classList.remove("show"); }
+
+/* ---------- mode switching ---------- */
+
+document.getElementById("modeNav").addEventListener("click", function(ev){
+  var btn = ev.target.closest("button[data-mode]");
+  if(!btn) return;
+  setMode(btn.dataset.mode);
+});
+
+document.getElementById("hintToggle").addEventListener("click", function(){
+  hintOn = !hintOn;
+  this.classList.toggle("on", hintOn);
+  this.setAttribute("aria-checked", hintOn);
+});
+
+function setMode(m){
+  mode = m;
+  Array.prototype.forEach.call(document.querySelectorAll("#modeNav button"), function(b){
+    b.classList.toggle("active", b.dataset.mode===m);
+  });
+  gStates.style("display","none");
+  gWorld.style("display",null);
+  sideInfo.hidden = true;
+  endCard.classList.remove("show");
+  landPaths.classed("correct wrong revealed",false);
+  statePaths.classed("correct wrong revealed",false);
+  svg.interrupt().transition().duration(300).call(zoomBehavior.transform, d3.zoomIdentity);
+  answerPanel.hidden = false;
+  answerRow.hidden = true;
+  findRow.hidden = true;
+  nextRow.hidden = true;
+  feedback.classList.remove("show","ok","bad");
+  activeTextChecker = null;
+
+  if(m==="capitals"){
+    startCapitals();
+  } else if(m==="africa"){
+    startCountryFind("africa", AFRICA_POOL, AFRICA_NOT);
+  } else if(m==="america"){
+    startCountryFind("america", AMERICA_POOL, AMERICA_NOT);
+  } else if(m==="river"){
+    setupRiverNameStep();
+  }
+}
+
+function shuffle(arr){
+  for(var i=arr.length-1;i>0;i--){
+    var j = Math.floor(Math.random()*(i+1));
+    var t = arr[i]; arr[i]=arr[j]; arr[j]=t;
+  }
+  return arr;
+}
+
+/* ---------- generic find-on-the-map engine ---------- */
+
+function startFind(queue, layer, opts){
+  findQueue = queue;
+  findIdx = 0;
+  findFound = 0; findRevealed = 0;
+  findLayer = layer;
+  findOnEachFound = opts.onEachFound;
+  findOnDone = opts.onDone;
+  showFindTarget();
+}
+
+function showFindTarget(){
+  findLocked = false;
+  (findLayer==="world" ? landPaths : statePaths).classed("wrong",false);
+  answerRow.hidden = true;
+  nextRow.hidden = true;
+  feedback.classList.remove("show","ok","bad");
+
+  if(findIdx >= findQueue.length){
+    findRow.hidden = true;
+    var onDone = findOnDone;
+    var f = findFound, r = findRevealed, n = findQueue.length;
+    onDone && onDone(f, r, n);
+    return;
+  }
+  findRow.hidden = false;
+  answerLabel.textContent = "Klikni na správný stát na mapě";
+  var t = findQueue[findIdx];
+  progressLabel.textContent = (findIdx+1)+" / "+findQueue.length;
+  promptText.innerHTML = "Klikni na: <span class='target'>"+t.label+"</span>";
+  if(mode==="capitals") subPrompt.textContent = "Pak napiš hlavní město.";
+  else subPrompt.textContent = "Nevíš-li, nech si stát ukázat.";
+}
+
+function resolveFind(revealed){
+  var t = findQueue[findIdx];
+  if(!t) return;
+  findLocked = true;
+  findRow.hidden = true;
+  var sel = (findLayer==="world" ? landPaths : statePaths).filter(function(d){ return d.properties.name===t.key; });
+  sel.classed(revealed ? "revealed" : "correct", true);
+  if(revealed) findRevealed++; else findFound++;
+  var pathFn = (findLayer==="world") ? path : statesPath;
+  var feature = sel.data()[0];
+  if(feature) zoomToBounds(pathFn, feature, findLayer==="world" ? 120 : 60);
+  var advance = function(){ findIdx++; showFindTarget(); };
+  findOnEachFound && findOnEachFound(t, revealed, advance);
+}
+
+function onFindMatch(name){
+  if(findLocked) return false;
+  var t = findQueue[findIdx];
+  if(!t || name !== t.key) return false;
+  resolveFind(false);
+  return true;
+}
+
+revealBtn.addEventListener("click", function(){
+  if(findLocked) return;
+  resolveFind(true);
+});
+
+function showNextUI(advance){
+  nextRow.hidden = false;
+  nextBtn.textContent = "Další →";
+  nextBtn.onclick = advance;
+}
+
+/* ---------- mode: capitals (Q13) ---------- */
+
+function startCapitals(){
+  var queue = shuffle(CAPITALS.slice()).map(function(c){
+    return { key:c.country, label:CZ_NAMES[c.country], capital:c };
+  });
+  startFind(queue, "world", {
+    onEachFound: function(t, revealed, advance){
+      answerRow.hidden = false;
+      answerLabel.textContent = "Hlavní město státu "+t.label+"?";
+      answerInput.value = "";
+      answerInput.focus();
+      activeTextChecker = function(){
+        var val = normalize(answerInput.value);
+        var ok = t.capital.answers.some(function(a){ return normalize(a)===val; });
+        total++; if(ok) score++;
+        updateScore(); persist();
+        feedback.classList.add("show", ok?"ok":"bad");
+        feedback.innerHTML = ok
+          ? "Správně! ✓"
+          : "Špatně — správně je <span class='answer-reveal'>"+t.capital.display+"</span>";
+        answerRow.hidden = true;
+        showNextUI(advance);
+      };
+    },
+    onDone: function(found, revealed, n){
+      showEnd("Hlavní města hotova!", "Prošel/prošla jsi všech "+n+" států ze cvičení 13. Sám/sama jsi našel/našla "+found+", "+revealed+" ti Atlas ukázal.");
+    }
+  });
+}
+
+/* ---------- mode: find countries (Q18 / Q19) ---------- */
+
+function startCountryFind(kind, pool, notList){
+  var contName = kind==="africa" ? "Africe" : "Americe";
+  var queue = shuffle(pool.slice()).map(function(name){
+    return { key:name, label:CZ_NAMES[name]||name };
+  });
+  startFind(queue, "world", {
+    onEachFound: function(t, revealed, advance){
+      var isNot = notList.indexOf(t.key) >= 0;
+      var fact = "<b>"+t.label+"</b> "+(isNot ? "NEleží v " : "leží v ")+contName+".";
+      total++; if(!revealed) score++;
+      updateScore(); persist();
+      feedback.classList.add("show","ok");
+      feedback.innerHTML = (revealed ? "Tady je: " : "Správně! ✓ ") + fact;
+      showNextUI(advance);
+    },
+    onDone: function(found, revealed, n){
+      var title = kind==="africa" ? "Afrika hotová!" : "Amerika hotová!";
+      showEnd(title, "Prošel/prošla jsi všech "+n+" států. Sám/sama jsi našel/našla "+found+", "+revealed+" ti Atlas ukázal.");
+    }
+  });
+}
+
+/* ---------- mode: river (Q12) ---------- */
+
+function setupRiverNameStep(){
+  promptText.innerHTML = "Jak se jmenuje <span class='target'>nejdelší řeka USA</span>?";
+  subPrompt.textContent = "Napiš název řeky.";
+  progressLabel.textContent = "";
+  findRow.hidden = true;
+  answerRow.hidden = false;
+  answerLabel.textContent = "Název řeky";
+  answerInput.value = "";
+  answerInput.placeholder = "Řeka…";
+  answerInput.focus();
+  activeTextChecker = function(){
+    var val = normalize(answerInput.value);
+    var okAnswers = ["mississippi","missouri","mississippi missouri"];
+    var ok = okAnswers.indexOf(val) >= 0;
+    total++; if(ok) score++;
+    updateScore(); persist();
+    feedback.classList.add("show", ok?"ok":"bad");
+    feedback.innerHTML = ok
+      ? "Správně! ✓"
+      : "Správně je <span class='answer-reveal'>Mississippi</span> (soustava Mississippi–Missouri).";
+    answerRow.hidden = true;
+    nextRow.hidden = false;
+    nextBtn.textContent = "Pokračovat: kudy protéká →";
+    nextBtn.onclick = startRiverStatesStep;
+  };
+}
+
+function startRiverStatesStep(){
+  gWorld.style("display","none");
+  gStates.style("display",null);
+  statePaths.classed("correct wrong revealed", false);
+  svg.interrupt().transition().duration(300).call(zoomBehavior.transform, d3.zoomIdentity);
+  answerRow.hidden = true;
+  nextRow.hidden = true;
+  sideInfo.hidden = false;
+  sideInfo.innerHTML = "<h3>Mississippi protéká:</h3><div id='riverTrail' style=\"font-family:'IBM Plex Mono',monospace;font-size:.72rem;line-height:1.7\"></div>";
+  nextBtn.onclick = null;
+
+  var queue = RIVER_STATES.map(function(s){ return { key:s, label:s }; });
+  startFind(queue, "states", {
+    onEachFound: function(t, revealed, advance){
+      total++; if(!revealed) score++;
+      updateScore(); persist();
+      var trail = document.getElementById("riverTrail");
+      if(trail) trail.innerHTML += (trail.innerHTML ? " → " : "") + t.label + (revealed ? " <span style='opacity:.55'>(ukázáno)</span>" : "");
+      feedback.classList.add("show","ok");
+      feedback.innerHTML = revealed ? "Tady je: <b>"+t.label+"</b>" : "Správně! ✓ <b>"+t.label+"</b>";
+      showNextUI(advance);
+    },
+    onDone: function(found, revealed, n){
+      showEnd("Mississippi prozkoumána!", "Prošel/prošla jsi všech "+n+" států podél řeky. Sám/sama jsi našel/našla "+found+", "+revealed+" ti Atlas ukázal.");
+    }
+  });
+}
+
+/* ---------- shared click / feedback ---------- */
+
+function onLandClick(ev, d){
+  if(mode==="river") return;
+  if(findLocked) return;
+  var name = d.properties.name;
+  if(!onFindMatch(name)){
+    flashWrongSel(landPaths.filter(function(x){ return x.properties.name===name; }));
+  }
+}
+
+function onStateClick(ev, d){
+  if(mode!=="river") return;
+  if(findLocked) return;
+  var name = d.properties.name;
+  if(!onFindMatch(name)){
+    flashWrongSel(statePaths.filter(function(x){ return x.properties.name===name; }));
+  }
+}
+
+function flashWrongSel(sel){
+  sel.classed("wrong",true);
+  setTimeout(function(){ sel.classed("wrong",false); }, 450);
+}
+
+submitBtn.addEventListener("click", function(){ activeTextChecker && activeTextChecker(); });
+answerInput.addEventListener("keydown", function(ev){ if(ev.key==="Enter"){ activeTextChecker && activeTextChecker(); } });
+
+function showEnd(title, text){
+  document.getElementById("endTitle").textContent = title;
+  document.getElementById("endText").textContent = text + " Celkové skóre: "+score+"/"+total+".";
+  endCard.classList.add("show");
+}
+document.getElementById("restartBtn").addEventListener("click", function(){
+  endCard.classList.remove("show");
+  setMode(mode);
+});
+
+/* ---------- boot via hot API ---------- */
+
+if(window.claude && window.claude.hot && window.claude.hot.ready){
+  window.claude.hot.ready(start);
+} else {
+  var saved = null;
+  try{ saved = JSON.parse(localStorage.getItem("atlas-trenazer-score")); }catch(e){}
+  start(saved);
+}
+})();
+</script>
