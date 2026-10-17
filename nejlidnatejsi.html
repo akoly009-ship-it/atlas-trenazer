@@ -1,0 +1,586 @@
+<title>Nejlidnatější státy</title>
+<script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Work+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+  :root{
+    --paper:#eae6d8;
+    --paper-raised:#f4f1e6;
+    --ink:#1c2b2e;
+    --ink-soft:#4a5c5c;
+    --line:#c9c1a8;
+    --brass:#a8672c;
+    --brass-deep:#7d4a1c;
+    --ok:#3f7d54;
+    --ok-fill:#bfe0c8;
+    --bad:#a8402f;
+    --bad-fill:#eec3ba;
+    --map-fill:#f7f4ea;
+    --map-fill-dim:#eeeadb;
+    --map-stroke:#8a8264;
+    --map-hover:#f1e2b8;
+    --panel-shadow:0 10px 30px -12px rgba(28,43,46,.35);
+    --focus:#3f7d54;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --paper:#101b1c;
+      --paper-raised:#162424;
+      --ink:#e9e6d8;
+      --ink-soft:#9fb0ac;
+      --line:#2c3b3a;
+      --brass:#d99a52;
+      --brass-deep:#e9b46f;
+      --ok:#6fbf8a;
+      --ok-fill:#1f3a2a;
+      --bad:#e08b78;
+      --bad-fill:#3c2420;
+      --map-fill:#1a2a2a;
+      --map-fill-dim:#152121;
+      --map-stroke:#4a5c58;
+      --map-hover:#334a3c;
+      --panel-shadow:0 10px 30px -12px rgba(0,0,0,.6);
+    }
+  }
+  :root[data-theme="dark"]{
+    --paper:#101b1c;
+    --paper-raised:#162424;
+    --ink:#e9e6d8;
+    --ink-soft:#9fb0ac;
+    --line:#2c3b3a;
+    --brass:#d99a52;
+    --brass-deep:#e9b46f;
+    --ok:#6fbf8a;
+    --ok-fill:#1f3a2a;
+    --bad:#e08b78;
+    --bad-fill:#3c2420;
+    --map-fill:#1a2a2a;
+    --map-fill-dim:#152121;
+    --map-stroke:#4a5c58;
+    --map-hover:#334a3c;
+    --panel-shadow:0 10px 30px -12px rgba(0,0,0,.6);
+  }
+
+  *{box-sizing:border-box;}
+  [hidden]{display:none!important;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:"Work Sans",system-ui,sans-serif;
+    display:flex;
+    flex-direction:column;
+    overflow:hidden;
+  }
+  .app{display:flex;flex-direction:column;height:100%;min-height:100%;}
+
+  header.top{
+    flex:0 0 auto;
+    padding:calc(10px + env(safe-area-inset-top,0px)) 16px 10px;
+    background:var(--paper-raised);
+    border-bottom:1px solid var(--line);
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+  }
+  .brand{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;}
+  .brand h1{
+    font-family:"Fraunces",serif;
+    font-weight:600;
+    font-size:1.15rem;
+    margin:0;
+    letter-spacing:.01em;
+  }
+  .brand h1 em{font-style:normal;color:var(--brass-deep);}
+  .score{
+    font-family:"IBM Plex Mono",monospace;
+    font-size:.72rem;
+    color:var(--ink-soft);
+    letter-spacing:.03em;
+  }
+  .prompt-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .prompt{
+    font-family:"Fraunces",serif;
+    font-size:clamp(1rem,3vw,1.3rem);
+    font-weight:600;
+    display:flex;
+    align-items:baseline;
+    gap:8px;
+    flex-wrap:wrap;
+  }
+  .prompt .target{color:var(--brass-deep);}
+  .subprompt{font-size:.78rem;color:var(--ink-soft);}
+  .progress{
+    font-family:"IBM Plex Mono",monospace;
+    font-size:.72rem;
+    color:var(--ink-soft);
+    margin-left:auto;
+    white-space:nowrap;
+  }
+  .toggle-row{display:flex;align-items:center;gap:8px;font-size:.72rem;color:var(--ink-soft);}
+  .toggle{
+    position:relative;
+    width:34px;height:19px;
+    border-radius:999px;
+    background:var(--line);
+    border:none;
+    cursor:pointer;
+    flex:0 0 auto;
+  }
+  .toggle::after{
+    content:"";
+    position:absolute;
+    top:2px;left:2px;
+    width:15px;height:15px;
+    border-radius:50%;
+    background:var(--paper-raised);
+    transition:transform .15s;
+  }
+  .toggle.on{background:var(--brass);}
+  .toggle.on::after{transform:translateX(15px);}
+  .ctrl-btn:focus-visible, .zoom-btn:focus-visible, input:focus-visible, .toggle:focus-visible{
+    outline:2px solid var(--focus);
+    outline-offset:2px;
+  }
+
+  main.stage{
+    position:relative;
+    flex:1 1 auto;
+    min-height:0;
+    background:var(--map-fill-dim);
+    overflow:hidden;
+  }
+  svg.map{width:100%;height:100%;display:block;touch-action:none;cursor:grab;}
+  svg.map:active{cursor:grabbing;}
+  path.land{
+    fill:var(--map-fill);
+    stroke:var(--map-stroke);
+    stroke-width:.5;
+    vector-effect:non-scaling-stroke;
+    transition:fill .12s;
+  }
+  path.land:hover{fill:var(--map-hover);}
+  path.land.correct{fill:var(--ok-fill);stroke:var(--ok);}
+  path.land.wrong{fill:var(--bad-fill);stroke:var(--bad);}
+  path.land.revealed{fill:var(--brass);stroke:var(--brass-deep);}
+
+  .zoom-ctrls{
+    position:absolute;
+    right:12px;
+    bottom:calc(12px + env(safe-area-inset-bottom,0px));
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+    z-index:5;
+  }
+  .zoom-btn{
+    width:34px;height:34px;
+    border-radius:8px;
+    border:1px solid var(--line);
+    background:var(--paper-raised);
+    color:var(--ink);
+    font-size:1.1rem;
+    line-height:1;
+    cursor:pointer;
+    box-shadow:var(--panel-shadow);
+  }
+  .zoom-btn:hover{border-color:var(--brass);}
+
+  .tooltip{
+    position:absolute;
+    pointer-events:none;
+    background:var(--ink);
+    color:var(--paper);
+    font-family:"IBM Plex Mono",monospace;
+    font-size:.68rem;
+    padding:3px 7px;
+    border-radius:5px;
+    transform:translate(-50%,-130%);
+    white-space:nowrap;
+    z-index:6;
+    opacity:0;
+    transition:opacity .1s;
+  }
+  .tooltip.show{opacity:1;}
+
+  .answer-panel{
+    position:absolute;
+    left:50%;
+    bottom:calc(14px + env(safe-area-inset-bottom,0px));
+    transform:translateX(-50%);
+    width:min(420px,calc(100% - 28px));
+    background:var(--paper-raised);
+    border:1px solid var(--line);
+    border-radius:14px;
+    box-shadow:var(--panel-shadow);
+    padding:12px 14px;
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+    z-index:5;
+  }
+  .answer-panel .label{
+    font-size:.7rem;
+    text-transform:uppercase;
+    letter-spacing:.06em;
+    color:var(--ink-soft);
+  }
+  .answer-row{display:flex;gap:8px;}
+  .answer-row input{
+    flex:1;
+    min-width:0;
+    font:inherit;
+    font-family:"Work Sans",sans-serif;
+    font-size:.95rem;
+    padding:9px 11px;
+    border-radius:9px;
+    border:1px solid var(--line);
+    background:var(--paper);
+    color:var(--ink);
+  }
+  .ctrl-btn{
+    font:inherit;
+    font-weight:600;
+    font-size:.85rem;
+    padding:9px 15px;
+    border-radius:9px;
+    border:1px solid var(--brass);
+    background:var(--brass);
+    color:#fff8ee;
+    cursor:pointer;
+    white-space:nowrap;
+  }
+  .ctrl-btn.ghost{background:transparent;color:var(--brass-deep);}
+  .feedback{font-size:.85rem;font-weight:600;display:none;align-items:center;gap:6px;flex-wrap:wrap;}
+  .feedback.show{display:flex;}
+  .feedback.ok{color:var(--ok);}
+  .feedback.bad{color:var(--bad);}
+  .feedback .answer-reveal{font-weight:500;color:var(--ink-soft);}
+
+  .end-card{
+    position:absolute;
+    inset:0;
+    display:none;
+    align-items:center;
+    justify-content:center;
+    background:color-mix(in srgb, var(--paper) 88%, transparent);
+    z-index:8;
+    padding:20px;
+  }
+  .end-card.show{display:flex;}
+  .end-card .box{
+    background:var(--paper-raised);
+    border:1px solid var(--line);
+    border-radius:16px;
+    box-shadow:var(--panel-shadow);
+    padding:22px 24px;
+    max-width:340px;
+    text-align:center;
+  }
+  .end-card h2{font-family:"Fraunces",serif;font-size:1.3rem;margin:0 0 6px;}
+  .end-card p{font-size:.85rem;color:var(--ink-soft);margin:0 0 16px;}
+</style>
+
+<div class="app">
+  <header class="top">
+    <div class="brand">
+      <h1>Nejlidnatější <em>státy</em></h1>
+      <span class="score" id="scoreLabel">skóre 0/0</span>
+    </div>
+    <div class="prompt-row">
+      <div class="prompt" id="promptText">Načítám mapu…</div>
+      <div class="progress" id="progressLabel"></div>
+    </div>
+    <div class="subprompt" id="subPrompt"></div>
+    <div class="toggle-row">
+      <button class="toggle on" id="hintToggle" role="switch" aria-checked="true" aria-label="Nápověda s názvy"></button>
+      <span>Nápověda: názvy při najetí myší</span>
+    </div>
+  </header>
+
+  <main class="stage">
+    <svg class="map" id="map"></svg>
+    <div class="tooltip" id="tooltip"></div>
+    <div class="zoom-ctrls">
+      <button class="zoom-btn" id="zoomIn" aria-label="Přiblížit">+</button>
+      <button class="zoom-btn" id="zoomOut" aria-label="Oddálit">−</button>
+      <button class="zoom-btn" id="zoomReset" aria-label="Reset pohledu">⟲</button>
+    </div>
+    <div class="answer-panel" id="answerPanel">
+      <div class="label" id="answerLabel">Klikni na správný stát na mapě</div>
+      <div class="answer-row" id="answerRow" hidden>
+        <input type="text" id="answerInput" placeholder="Hlavní město…" autocomplete="off" spellcheck="false">
+        <button class="ctrl-btn" id="submitBtn">Ověřit</button>
+      </div>
+      <div class="answer-row" id="findRow" hidden style="justify-content:flex-end">
+        <button class="ctrl-btn ghost" id="revealBtn">Nevím – ukázat</button>
+      </div>
+      <div class="feedback" id="feedback"></div>
+      <div class="answer-row" id="nextRow" hidden style="justify-content:flex-end">
+        <button class="ctrl-btn" id="nextBtn">Další →</button>
+      </div>
+    </div>
+    <div class="end-card" id="endCard">
+      <div class="box">
+        <h2 id="endTitle">Hotovo!</h2>
+        <p id="endText"></p>
+        <button class="ctrl-btn" id="restartBtn">Zkusit znovu</button>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* 16 nejlidnatějších států podle pracovního listu */
+var COUNTRIES = [
+  {key:"India", label:"Indie", display:"Nové Dillí", answers:["nove dilli","dilli","delhi","new delhi","nove delhi","nove dehli","dehli"]},
+  {key:"China", label:"Čína", display:"Peking", answers:["peking","beijing"]},
+  {key:"United States of America", label:"USA", display:"Washington, D.C.", answers:["washington","washington dc"]},
+  {key:"Indonesia", label:"Indonésie", display:"Jakarta", answers:["jakarta"]},
+  {key:"Pakistan", label:"Pákistán", display:"Islámábád", answers:["islamabad"]},
+  {key:"Nigeria", label:"Nigérie", display:"Abuja", answers:["abuja","abudza"]},
+  {key:"Brazil", label:"Brazílie", display:"Brasília", answers:["brasilia","brazilia"]},
+  {key:"Bangladesh", label:"Bangladéš", display:"Dháka", answers:["dhaka","daka"]},
+  {key:"Russia", label:"Rusko", display:"Moskva", answers:["moskva","moscow"]},
+  {key:"Ethiopia", label:"Etiopie", display:"Addis Abeba", answers:["addis abeba","addis ababa","adis abeba"]},
+  {key:"Mexico", label:"Mexiko", display:"Ciudad de México", answers:["ciudad de mexico","mexico city","mexiko city"]},
+  {key:"Japan", label:"Japonsko", display:"Tokio", answers:["tokio","tokyo"]},
+  {key:"Egypt", label:"Egypt", display:"Káhira", answers:["kahira","cairo"]},
+  {key:"Philippines", label:"Filipíny", display:"Manila", answers:["manila"]},
+  {key:"Dem. Rep. Congo", label:"Kongo (Kinshasa)", display:"Kinshasa", answers:["kinshasa","kinsasa"]},
+  {key:"Vietnam", label:"Vietnam", display:"Hanoj", answers:["hanoj","hanoi"]}
+];
+
+var CZ_NAMES = {"Congo":"Kongo (Brazzaville)"};
+COUNTRIES.forEach(function(c){ CZ_NAMES[c.key] = c.label; });
+
+function normalize(s){
+  var d = (s||"").toString().trim().toLowerCase().normalize("NFD");
+  var out = "";
+  for(var i=0;i<d.length;i++){
+    var c = d.charCodeAt(i);
+    if(c < 768 || c > 879) out += d.charAt(i);
+  }
+  return out.replace(/[.,]/g,"").replace(/\s+/g," ").trim();
+}
+
+function shuffle(arr){
+  for(var i=arr.length-1;i>0;i--){
+    var j = Math.floor(Math.random()*(i+1));
+    var t = arr[i]; arr[i]=arr[j]; arr[j]=t;
+  }
+  return arr;
+}
+
+/* ---------- state ---------- */
+
+var score = 0, total = 0;
+var svg = d3.select("#map");
+var gWorld = svg.append("g");
+var landPaths, path, zoomBehavior;
+var width = 960, height = 520;
+var hintOn = true;
+var activeTextChecker = null;
+
+var findQueue = [], findIdx = 0, findFound = 0, findRevealed = 0, findLocked = false;
+
+var promptText = document.getElementById("promptText");
+var subPrompt = document.getElementById("subPrompt");
+var progressLabel = document.getElementById("progressLabel");
+var scoreLabel = document.getElementById("scoreLabel");
+var answerLabel = document.getElementById("answerLabel");
+var answerRow = document.getElementById("answerRow");
+var answerInput = document.getElementById("answerInput");
+var submitBtn = document.getElementById("submitBtn");
+var findRow = document.getElementById("findRow");
+var revealBtn = document.getElementById("revealBtn");
+var feedback = document.getElementById("feedback");
+var nextRow = document.getElementById("nextRow");
+var nextBtn = document.getElementById("nextBtn");
+var tooltip = document.getElementById("tooltip");
+var endCard = document.getElementById("endCard");
+
+function updateScore(){ scoreLabel.textContent = "skóre " + score + "/" + total; }
+function persist(){
+  try{ localStorage.setItem("nejlidnatejsi-score", JSON.stringify({score:score,total:total})); }catch(e){}
+}
+
+/* ---------- map ---------- */
+
+function buildMap(features){
+  var vb = svg.node().getBoundingClientRect();
+  width = vb.width || 960;
+  height = vb.height || 520;
+  svg.attr("viewBox","0 0 "+width+" "+height);
+
+  var land = features.filter(function(f){ return f.properties.name !== "Antarctica"; });
+  var projection = d3.geoNaturalEarth1();
+  projection.fitExtent([[14,14],[width-14,height-14]], {type:"FeatureCollection", features:land});
+  path = d3.geoPath(projection);
+
+  landPaths = gWorld.selectAll("path.land")
+    .data(land)
+    .enter().append("path")
+    .attr("class","land")
+    .attr("d", path)
+    .on("mousemove", function(ev, d){
+      if(!hintOn){ hideTooltip(); return; }
+      showTooltip(ev, CZ_NAMES[d.properties.name] || d.properties.name);
+    })
+    .on("mouseleave", hideTooltip)
+    .on("click", onLandClick);
+
+  zoomBehavior = d3.zoom()
+    .scaleExtent([1,12])
+    .on("zoom", function(ev){ gWorld.attr("transform", ev.transform); });
+  svg.call(zoomBehavior);
+
+  document.getElementById("zoomIn").onclick = function(){ svg.transition().duration(200).call(zoomBehavior.scaleBy, 1.6); };
+  document.getElementById("zoomOut").onclick = function(){ svg.transition().duration(200).call(zoomBehavior.scaleBy, 0.625); };
+  document.getElementById("zoomReset").onclick = function(){ svg.transition().duration(250).call(zoomBehavior.transform, d3.zoomIdentity); };
+}
+
+function zoomToFeature(feature){
+  var b = path.bounds(feature);
+  var dx = b[1][0]-b[0][0], dy = b[1][1]-b[0][1];
+  var x = (b[0][0]+b[1][0])/2, y = (b[0][1]+b[1][1])/2;
+  var scale = Math.max(1, Math.min(8, 0.9 / Math.max(dx/(width-120), dy/(height-120))));
+  svg.interrupt().transition().duration(500).call(
+    zoomBehavior.transform,
+    d3.zoomIdentity.translate(width/2 - scale*x, height/2 - scale*y).scale(scale)
+  );
+}
+
+function showTooltip(ev, text){
+  var box = svg.node().getBoundingClientRect();
+  tooltip.textContent = text;
+  tooltip.style.left = (ev.clientX - box.left) + "px";
+  tooltip.style.top = (ev.clientY - box.top) + "px";
+  tooltip.classList.add("show");
+}
+function hideTooltip(){ tooltip.classList.remove("show"); }
+
+document.getElementById("hintToggle").addEventListener("click", function(){
+  hintOn = !hintOn;
+  this.classList.toggle("on", hintOn);
+  this.setAttribute("aria-checked", hintOn);
+});
+
+/* ---------- game: find the country, then write its capital ---------- */
+
+function startRound(){
+  endCard.classList.remove("show");
+  landPaths.classed("correct wrong revealed", false);
+  svg.interrupt().transition().duration(300).call(zoomBehavior.transform, d3.zoomIdentity);
+  findQueue = shuffle(COUNTRIES.slice());
+  findIdx = 0; findFound = 0; findRevealed = 0;
+  showTarget();
+}
+
+function showTarget(){
+  findLocked = false;
+  activeTextChecker = null;
+  landPaths.classed("correct wrong revealed", false);
+  answerRow.hidden = true;
+  nextRow.hidden = true;
+  feedback.classList.remove("show","ok","bad");
+
+  if(findIdx >= findQueue.length){
+    findRow.hidden = true;
+    showEnd();
+    return;
+  }
+  var t = findQueue[findIdx];
+  findRow.hidden = false;
+  answerLabel.textContent = "Klikni na správný stát na mapě";
+  progressLabel.textContent = (findIdx+1) + " / " + findQueue.length;
+  promptText.innerHTML = "Klikni na: <span class='target'>" + t.label + "</span>";
+  subPrompt.textContent = "Pak napiš hlavní město. Nevíš-li, kde stát leží, nech si ho ukázat.";
+}
+
+function resolveTarget(revealed){
+  var t = findQueue[findIdx];
+  if(!t) return;
+  findLocked = true;
+  findRow.hidden = true;
+  var sel = landPaths.filter(function(d){ return d.properties.name === t.key; });
+  sel.classed(revealed ? "revealed" : "correct", true);
+  if(revealed) findRevealed++; else findFound++;
+  var feature = sel.data()[0];
+  if(feature) zoomToFeature(feature);
+
+  answerRow.hidden = false;
+  answerLabel.textContent = "Hlavní město státu " + t.label + "?";
+  answerInput.value = "";
+  answerInput.focus();
+  activeTextChecker = function(){
+    var val = normalize(answerInput.value);
+    var ok = t.answers.some(function(a){ return normalize(a) === val; });
+    total++; if(ok) score++;
+    updateScore(); persist();
+    feedback.classList.add("show", ok ? "ok" : "bad");
+    feedback.innerHTML = ok
+      ? "Správně! ✓"
+      : "Špatně — správně je <span class='answer-reveal'>" + t.display + "</span>";
+    answerRow.hidden = true;
+    activeTextChecker = null;
+    nextRow.hidden = false;
+    nextBtn.textContent = (findIdx + 1 < findQueue.length) ? "Další →" : "Dokončit";
+    nextBtn.onclick = function(){ findIdx++; showTarget(); };
+  };
+}
+
+function onLandClick(ev, d){
+  if(findLocked) return;
+  var t = findQueue[findIdx];
+  if(!t) return;
+  if(d.properties.name === t.key){
+    resolveTarget(false);
+  } else {
+    var sel = landPaths.filter(function(x){ return x.properties.name === d.properties.name; });
+    sel.classed("wrong", true);
+    setTimeout(function(){ sel.classed("wrong", false); }, 450);
+  }
+}
+
+revealBtn.addEventListener("click", function(){
+  if(findLocked) return;
+  resolveTarget(true);
+});
+submitBtn.addEventListener("click", function(){ activeTextChecker && activeTextChecker(); });
+answerInput.addEventListener("keydown", function(ev){
+  if(ev.key === "Enter"){ activeTextChecker && activeTextChecker(); }
+});
+
+function showEnd(){
+  document.getElementById("endTitle").textContent = "Hotovo!";
+  document.getElementById("endText").textContent =
+    "Všech " + findQueue.length + " nejlidnatějších států máš za sebou. Na mapě nalezeno samostatně: " +
+    findFound + ", ukázáno: " + findRevealed + ". Celkové skóre (hlavní města): " + score + "/" + total + ".";
+  endCard.classList.add("show");
+}
+document.getElementById("restartBtn").addEventListener("click", startRound);
+
+/* ---------- boot ---------- */
+
+var saved = null;
+try{ saved = JSON.parse(localStorage.getItem("nejlidnatejsi-score")); }catch(e){}
+if(saved){ score = saved.score || 0; total = saved.total || 0; }
+updateScore();
+
+fetch("countries-110m.json")
+  .then(function(r){ return r.json(); })
+  .then(function(topo){
+    buildMap(topojson.feature(topo, topo.objects.countries).features);
+    startRound();
+  })
+  .catch(function(err){
+    promptText.textContent = "Chyba při načítání mapy.";
+    console.error(err);
+  });
+})();
+</script>
