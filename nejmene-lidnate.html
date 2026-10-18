@@ -1,0 +1,589 @@
+<title>Nejméně lidnaté státy</title>
+<script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Work+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+  :root{
+    --paper:#eae6d8;
+    --paper-raised:#f4f1e6;
+    --ink:#1c2b2e;
+    --ink-soft:#4a5c5c;
+    --line:#c9c1a8;
+    --brass:#a8672c;
+    --brass-deep:#7d4a1c;
+    --ok:#3f7d54;
+    --ok-fill:#bfe0c8;
+    --bad:#a8402f;
+    --bad-fill:#eec3ba;
+    --map-fill:#f7f4ea;
+    --map-fill-dim:#eeeadb;
+    --map-stroke:#8a8264;
+    --map-hover:#f1e2b8;
+    --panel-shadow:0 10px 30px -12px rgba(28,43,46,.35);
+    --focus:#3f7d54;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --paper:#101b1c;
+      --paper-raised:#162424;
+      --ink:#e9e6d8;
+      --ink-soft:#9fb0ac;
+      --line:#2c3b3a;
+      --brass:#d99a52;
+      --brass-deep:#e9b46f;
+      --ok:#6fbf8a;
+      --ok-fill:#1f3a2a;
+      --bad:#e08b78;
+      --bad-fill:#3c2420;
+      --map-fill:#1a2a2a;
+      --map-fill-dim:#152121;
+      --map-stroke:#4a5c58;
+      --map-hover:#334a3c;
+      --panel-shadow:0 10px 30px -12px rgba(0,0,0,.6);
+    }
+  }
+  :root[data-theme="dark"]{
+    --paper:#101b1c;
+    --paper-raised:#162424;
+    --ink:#e9e6d8;
+    --ink-soft:#9fb0ac;
+    --line:#2c3b3a;
+    --brass:#d99a52;
+    --brass-deep:#e9b46f;
+    --ok:#6fbf8a;
+    --ok-fill:#1f3a2a;
+    --bad:#e08b78;
+    --bad-fill:#3c2420;
+    --map-fill:#1a2a2a;
+    --map-fill-dim:#152121;
+    --map-stroke:#4a5c58;
+    --map-hover:#334a3c;
+    --panel-shadow:0 10px 30px -12px rgba(0,0,0,.6);
+  }
+
+  *{box-sizing:border-box;}
+  [hidden]{display:none!important;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:"Work Sans",system-ui,sans-serif;
+    display:flex;
+    flex-direction:column;
+    overflow:hidden;
+  }
+  .app{display:flex;flex-direction:column;height:100%;min-height:100%;}
+
+  header.top{
+    flex:0 0 auto;
+    padding:calc(10px + env(safe-area-inset-top,0px)) 16px 10px;
+    background:var(--paper-raised);
+    border-bottom:1px solid var(--line);
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+  }
+  .brand{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;}
+  .brand h1{
+    font-family:"Fraunces",serif;
+    font-weight:600;
+    font-size:1.15rem;
+    margin:0;
+    letter-spacing:.01em;
+  }
+  .brand h1 em{font-style:normal;color:var(--brass-deep);}
+  .score{
+    font-family:"IBM Plex Mono",monospace;
+    font-size:.72rem;
+    color:var(--ink-soft);
+    letter-spacing:.03em;
+  }
+  .prompt-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .prompt{
+    font-family:"Fraunces",serif;
+    font-size:clamp(1rem,3vw,1.3rem);
+    font-weight:600;
+    display:flex;
+    align-items:baseline;
+    gap:8px;
+    flex-wrap:wrap;
+  }
+  .prompt .target{color:var(--brass-deep);}
+  .subprompt{font-size:.78rem;color:var(--ink-soft);}
+  .progress{
+    font-family:"IBM Plex Mono",monospace;
+    font-size:.72rem;
+    color:var(--ink-soft);
+    margin-left:auto;
+    white-space:nowrap;
+  }
+  .toggle-row{display:flex;align-items:center;gap:8px;font-size:.72rem;color:var(--ink-soft);}
+  .toggle{
+    position:relative;
+    width:34px;height:19px;
+    border-radius:999px;
+    background:var(--line);
+    border:none;
+    cursor:pointer;
+    flex:0 0 auto;
+  }
+  .toggle::after{
+    content:"";
+    position:absolute;
+    top:2px;left:2px;
+    width:15px;height:15px;
+    border-radius:50%;
+    background:var(--paper-raised);
+    transition:transform .15s;
+  }
+  .toggle.on{background:var(--brass);}
+  .toggle.on::after{transform:translateX(15px);}
+  .ctrl-btn:focus-visible, .zoom-btn:focus-visible, .toggle:focus-visible{
+    outline:2px solid var(--focus);
+    outline-offset:2px;
+  }
+
+  main.stage{
+    position:relative;
+    flex:1 1 auto;
+    min-height:0;
+    background:var(--map-fill-dim);
+    overflow:hidden;
+  }
+  svg.map{width:100%;height:100%;display:block;touch-action:none;cursor:crosshair;}
+  path.land{
+    fill:var(--map-fill);
+    stroke:var(--map-stroke);
+    stroke-width:.5;
+    vector-effect:non-scaling-stroke;
+    transition:fill .12s;
+  }
+  path.land:hover{fill:var(--map-hover);}
+
+  circle.mark{
+    fill:none;
+    stroke-width:2.5;
+    vector-effect:non-scaling-stroke;
+    pointer-events:none;
+  }
+  circle.mark.correct{stroke:var(--ok);fill:var(--ok-fill);fill-opacity:.55;}
+  circle.mark.revealed{stroke:var(--brass-deep);fill:var(--brass);fill-opacity:.45;}
+  circle.mark.wrong{stroke:var(--bad);fill:var(--bad-fill);fill-opacity:.6;}
+  text.mark-label{
+    font-family:"Work Sans",sans-serif;
+    font-weight:600;
+    fill:var(--ink);
+    text-anchor:middle;
+    paint-order:stroke;
+    stroke:var(--paper-raised);
+    stroke-width:3px;
+    stroke-linejoin:round;
+    vector-effect:non-scaling-stroke;
+    pointer-events:none;
+  }
+
+  .zoom-ctrls{
+    position:absolute;
+    right:12px;
+    bottom:calc(12px + env(safe-area-inset-bottom,0px));
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+    z-index:5;
+  }
+  .zoom-btn{
+    width:34px;height:34px;
+    border-radius:8px;
+    border:1px solid var(--line);
+    background:var(--paper-raised);
+    color:var(--ink);
+    font-size:1.1rem;
+    line-height:1;
+    cursor:pointer;
+    box-shadow:var(--panel-shadow);
+  }
+  .zoom-btn:hover{border-color:var(--brass);}
+
+  .tooltip{
+    position:absolute;
+    pointer-events:none;
+    background:var(--ink);
+    color:var(--paper);
+    font-family:"IBM Plex Mono",monospace;
+    font-size:.68rem;
+    padding:3px 7px;
+    border-radius:5px;
+    transform:translate(-50%,-130%);
+    white-space:nowrap;
+    z-index:6;
+    opacity:0;
+    transition:opacity .1s;
+  }
+  .tooltip.show{opacity:1;}
+
+  .answer-panel{
+    position:absolute;
+    left:50%;
+    bottom:calc(14px + env(safe-area-inset-bottom,0px));
+    transform:translateX(-50%);
+    width:min(420px,calc(100% - 64px));
+    background:var(--paper-raised);
+    border:1px solid var(--line);
+    border-radius:14px;
+    box-shadow:var(--panel-shadow);
+    padding:12px 14px;
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+    z-index:5;
+  }
+  .answer-panel .label{
+    font-size:.7rem;
+    text-transform:uppercase;
+    letter-spacing:.06em;
+    color:var(--ink-soft);
+  }
+  .answer-row{display:flex;gap:8px;}
+  .ctrl-btn{
+    font:inherit;
+    font-weight:600;
+    font-size:.85rem;
+    padding:9px 15px;
+    border-radius:9px;
+    border:1px solid var(--brass);
+    background:var(--brass);
+    color:#fff8ee;
+    cursor:pointer;
+    white-space:nowrap;
+  }
+  .ctrl-btn.ghost{background:transparent;color:var(--brass-deep);}
+  .feedback{font-size:.85rem;font-weight:600;display:none;line-height:1.45;}
+  .feedback.show{display:block;}
+  .feedback.ok{color:var(--ok);}
+  .feedback.bad{color:var(--bad);}
+  .feedback .soft{font-weight:500;color:var(--ink-soft);}
+
+  .end-card{
+    position:absolute;
+    inset:0;
+    display:none;
+    align-items:center;
+    justify-content:center;
+    background:color-mix(in srgb, var(--paper) 88%, transparent);
+    z-index:8;
+    padding:20px;
+  }
+  .end-card.show{display:flex;}
+  .end-card .box{
+    background:var(--paper-raised);
+    border:1px solid var(--line);
+    border-radius:16px;
+    box-shadow:var(--panel-shadow);
+    padding:22px 24px;
+    max-width:340px;
+    text-align:center;
+  }
+  .end-card h2{font-family:"Fraunces",serif;font-size:1.3rem;margin:0 0 6px;}
+  .end-card p{font-size:.85rem;color:var(--ink-soft);margin:0 0 16px;}
+</style>
+
+<div class="app">
+  <header class="top">
+    <div class="brand">
+      <h1>Nejméně lidnaté <em>státy</em></h1>
+      <span class="score" id="scoreLabel">skóre 0/0</span>
+    </div>
+    <div class="prompt-row">
+      <div class="prompt" id="promptText">Načítám mapu…</div>
+      <div class="progress" id="progressLabel"></div>
+    </div>
+    <div class="subprompt" id="subPrompt"></div>
+    <div class="toggle-row">
+      <button class="toggle on" id="hintToggle" role="switch" aria-checked="true" aria-label="Nápověda s názvy"></button>
+      <span>Nápověda: názvy velkých států při najetí myší</span>
+    </div>
+  </header>
+
+  <main class="stage">
+    <svg class="map" id="map"></svg>
+    <div class="tooltip" id="tooltip"></div>
+    <div class="zoom-ctrls">
+      <button class="zoom-btn" id="zoomIn" aria-label="Přiblížit">+</button>
+      <button class="zoom-btn" id="zoomOut" aria-label="Oddálit">−</button>
+      <button class="zoom-btn" id="zoomReset" aria-label="Reset pohledu">⟲</button>
+    </div>
+    <div class="answer-panel" id="answerPanel">
+      <div class="label" id="answerLabel">Přibliž mapu a klikni na místo, kde stát leží</div>
+      <div class="answer-row" id="findRow" hidden style="justify-content:flex-end">
+        <button class="ctrl-btn ghost" id="revealBtn">Nevím – ukázat</button>
+      </div>
+      <div class="feedback" id="feedback"></div>
+      <div class="answer-row" id="nextRow" hidden style="justify-content:flex-end">
+        <button class="ctrl-btn" id="nextBtn">Další →</button>
+      </div>
+    </div>
+    <div class="end-card" id="endCard">
+      <div class="box">
+        <h2>Hotovo!</h2>
+        <p id="endText"></p>
+        <button class="ctrl-btn" id="restartBtn">Zkusit znovu</button>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* 10 nejméně lidnatých států podle pracovního listu; poloha = střed území */
+var TARGETS = [
+  {key:"vatikan", label:"Vatikán", lon:12.4534, lat:41.9029, capital:"Vatikán"},
+  {key:"niue", label:"Niue", lon:-169.867, lat:-19.055, capital:"Alofi"},
+  {key:"tokelau", label:"Tokelau", lon:-171.85, lat:-9.17, capital:null},
+  {key:"falklandy", label:"Falklandy", lon:-59.5, lat:-51.75, capital:"Stanley"},
+  {key:"montserrat", label:"Montserrat", lon:-62.19, lat:16.74, capital:"Brades (Plymouth je zničený sopkou)"},
+  {key:"helena", label:"Svatá Helena", lon:-5.71, lat:-15.96, capital:"Jamestown"},
+  {key:"spm", label:"Saint-Pierre a Miquelon", lon:-56.33, lat:46.83, capital:"Saint-Pierre"},
+  {key:"tuvalu", label:"Tuvalu", lon:179.0, lat:-8.5, capital:"Funafuti"},
+  {key:"wallis", label:"Wallis a Futuna", lon:-176.2, lat:-13.77, capital:"Mata-Utu"},
+  {key:"bartolomej", label:"Svatý Bartoloměj", lon:-62.83, lat:17.9, capital:"Gustavia"}
+];
+var CZ_NAMES = {"Falkland Is.":"Falklandy"};
+var HIT_RADIUS = 16; // px na obrazovce
+
+function shuffle(arr){
+  for(var i=arr.length-1;i>0;i--){
+    var j = Math.floor(Math.random()*(i+1));
+    var t = arr[i]; arr[i]=arr[j]; arr[j]=t;
+  }
+  return arr;
+}
+
+var score = 0, total = 0;
+var svg = d3.select("#map");
+var gZoom = svg.append("g");
+var gWorld = gZoom.append("g");
+var gMarks = gZoom.append("g");
+var projection, path, zoomBehavior;
+var width = 960, height = 520;
+var hintOn = true;
+var queue = [], idx = 0, found = 0, revealed = 0, locked = false;
+
+var promptText = document.getElementById("promptText");
+var subPrompt = document.getElementById("subPrompt");
+var progressLabel = document.getElementById("progressLabel");
+var scoreLabel = document.getElementById("scoreLabel");
+var answerLabel = document.getElementById("answerLabel");
+var findRow = document.getElementById("findRow");
+var revealBtn = document.getElementById("revealBtn");
+var feedback = document.getElementById("feedback");
+var nextRow = document.getElementById("nextRow");
+var nextBtn = document.getElementById("nextBtn");
+var tooltip = document.getElementById("tooltip");
+var endCard = document.getElementById("endCard");
+
+function updateScore(){ scoreLabel.textContent = "skóre " + score + "/" + total; }
+function persist(){
+  try{ localStorage.setItem("nejmene-lidnate-score", JSON.stringify({score:score,total:total})); }catch(e){}
+}
+
+/* ---------- map ---------- */
+
+function scaleMarks(k){
+  gMarks.selectAll("circle").attr("r", function(){ return (+this.getAttribute("data-r")) / k; });
+  gMarks.selectAll("text")
+    .attr("font-size", 12 / k)
+    .attr("y", function(){ return (+this.getAttribute("data-py")) - 18 / k; });
+}
+
+function buildMap(features){
+  var box = svg.node().getBoundingClientRect();
+  width = box.width || 960;
+  height = box.height || 520;
+  svg.attr("viewBox","0 0 "+width+" "+height);
+
+  var land = features.filter(function(f){ return f.properties.name !== "Antarctica"; });
+  projection = d3.geoNaturalEarth1();
+  projection.fitExtent([[14,14],[width-14,height-14]], {type:"FeatureCollection", features:land});
+  path = d3.geoPath(projection);
+
+  gWorld.selectAll("path.land")
+    .data(land)
+    .enter().append("path")
+    .attr("class","land")
+    .attr("d", path)
+    .on("mousemove", function(ev, d){
+      if(!hintOn){ hideTooltip(); return; }
+      showTooltip(ev, CZ_NAMES[d.properties.name] || d.properties.name);
+    })
+    .on("mouseleave", hideTooltip);
+
+  zoomBehavior = d3.zoom()
+    .scaleExtent([1,60])
+    .on("zoom", function(ev){
+      gZoom.attr("transform", ev.transform);
+      scaleMarks(ev.transform.k);
+    });
+  svg.call(zoomBehavior);
+  svg.on("click", onMapClick);
+
+  document.getElementById("zoomIn").onclick = function(){ svg.transition().duration(200).call(zoomBehavior.scaleBy, 1.8); };
+  document.getElementById("zoomOut").onclick = function(){ svg.transition().duration(200).call(zoomBehavior.scaleBy, 0.55); };
+  document.getElementById("zoomReset").onclick = function(){ svg.transition().duration(250).call(zoomBehavior.transform, d3.zoomIdentity); };
+}
+
+function showTooltip(ev, text){
+  var box = svg.node().getBoundingClientRect();
+  tooltip.textContent = text;
+  tooltip.style.left = (ev.clientX - box.left) + "px";
+  tooltip.style.top = (ev.clientY - box.top) + "px";
+  tooltip.classList.add("show");
+}
+function hideTooltip(){ tooltip.classList.remove("show"); }
+
+document.getElementById("hintToggle").addEventListener("click", function(){
+  hintOn = !hintOn;
+  this.classList.toggle("on", hintOn);
+  this.setAttribute("aria-checked", hintOn);
+  if(!hintOn) hideTooltip();
+});
+
+function drawMark(p, cls, r, label){
+  var c = gMarks.append("circle")
+    .attr("class","mark " + cls)
+    .attr("cx", p[0]).attr("cy", p[1])
+    .attr("data-r", r);
+  var txt = null;
+  if(label){
+    txt = gMarks.append("text")
+      .attr("class","mark-label")
+      .attr("x", p[0]).attr("data-py", p[1])
+      .text(label);
+  }
+  scaleMarks(d3.zoomTransform(svg.node()).k);
+  return [c, txt];
+}
+
+function zoomToPoint(p, k){
+  svg.interrupt().transition().duration(600).call(
+    zoomBehavior.transform,
+    d3.zoomIdentity.translate(width/2 - k*p[0], height/2 - k*p[1]).scale(k)
+  );
+}
+
+/* ---------- game: just click the right place ---------- */
+
+function startRound(){
+  endCard.classList.remove("show");
+  queue = shuffle(TARGETS.slice());
+  idx = 0; found = 0; revealed = 0;
+  svg.interrupt().transition().duration(300).call(zoomBehavior.transform, d3.zoomIdentity);
+  showTarget();
+}
+
+function showTarget(){
+  locked = false;
+  gMarks.selectAll("*").remove();
+  nextRow.hidden = true;
+  feedback.classList.remove("show","ok","bad");
+
+  if(idx >= queue.length){
+    findRow.hidden = true;
+    document.getElementById("endText").textContent =
+      "Všech " + queue.length + " nejméně lidnatých států máš za sebou. Sám jsi trefil: " + found + ", ukázáno: " + revealed + ".";
+    endCard.classList.add("show");
+    return;
+  }
+  var t = queue[idx];
+  findRow.hidden = false;
+  answerLabel.textContent = "Přibliž mapu a klikni na místo, kde stát leží";
+  progressLabel.textContent = (idx+1) + " / " + queue.length;
+  promptText.innerHTML = "Klikni na: <span class='target'>" + t.label + "</span>";
+  subPrompt.textContent = "Většina z nich je moc malá na to, aby měla na mapě hranice. Klikni do místa, kde leží.";
+}
+
+function resolve(wasRevealed){
+  var t = queue[idx];
+  locked = true;
+  findRow.hidden = true;
+  if(wasRevealed) revealed++; else found++;
+  total++; if(!wasRevealed) score++;
+  updateScore(); persist();
+
+  var p = projection([t.lon, t.lat]);
+  gMarks.selectAll("*").remove();
+  drawMark(p, wasRevealed ? "revealed" : "correct", 14, t.label);
+  zoomToPoint(p, 12);
+
+  var cap = t.capital
+    ? "Hlavní město: <b>" + t.capital + "</b>"
+    : "Hlavní město nemá <span class='soft'>(každý atol má vlastní správní centrum)</span>";
+  feedback.classList.remove("bad");
+  feedback.classList.add("show","ok");
+  feedback.innerHTML = (wasRevealed ? "Tady je: <b>" + t.label + "</b>. " : "Správně! ✓ ") + cap;
+  nextRow.hidden = false;
+  nextBtn.textContent = (idx + 1 < queue.length) ? "Další →" : "Dokončit";
+  nextBtn.onclick = function(){ idx++; showTarget(); };
+}
+
+function onMapClick(ev){
+  if(locked) return;
+  var t = queue[idx];
+  if(!t) return;
+  var pt = d3.pointer(ev, svg.node());
+  var tr = d3.zoomTransform(svg.node());
+  var mp = [(pt[0] - tr.x) / tr.k, (pt[1] - tr.y) / tr.k];
+
+  function screenDist(target){
+    var q = projection([target.lon, target.lat]);
+    return Math.hypot(q[0] - mp[0], q[1] - mp[1]) * tr.k;
+  }
+  var dCur = screenDist(t);
+  var nearest = TARGETS.every(function(o){ return o === t || screenDist(o) >= dCur; });
+
+  if(dCur <= HIT_RADIUS && nearest){
+    resolve(false);
+    return;
+  }
+
+  var wrong = drawMark(mp, "wrong", 10, null)[0];
+  setTimeout(function(){ wrong.remove(); }, 600);
+
+  var msg = "Vedle.";
+  var ll = projection.invert(mp);
+  if(ll){
+    var km = Math.round(d3.geoDistance(ll, [t.lon, t.lat]) * 6371 / 10) * 10;
+    msg = "Vedle — jsi zhruba " + km.toLocaleString("cs-CZ") + " km od cíle.";
+  }
+  feedback.classList.remove("ok");
+  feedback.classList.add("show","bad");
+  feedback.textContent = msg;
+}
+
+revealBtn.addEventListener("click", function(){
+  if(locked) return;
+  resolve(true);
+});
+document.getElementById("restartBtn").addEventListener("click", startRound);
+
+/* ---------- boot ---------- */
+
+var saved = null;
+try{ saved = JSON.parse(localStorage.getItem("nejmene-lidnate-score")); }catch(e){}
+if(saved){ score = saved.score || 0; total = saved.total || 0; }
+updateScore();
+
+fetch("countries-110m.json")
+  .then(function(r){ return r.json(); })
+  .then(function(topo){
+    buildMap(topojson.feature(topo, topo.objects.countries).features);
+    startRound();
+  })
+  .catch(function(err){
+    promptText.textContent = "Chyba při načítání mapy.";
+    console.error(err);
+  });
+})();
+</script>
