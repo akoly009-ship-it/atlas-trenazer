@@ -339,6 +339,7 @@
     font-weight:600;
     display:none;
     align-items:center;
+    flex-wrap:wrap;
     gap:6px;
   }
   .feedback.show{display:flex;}
@@ -408,9 +409,27 @@
     margin:0 0 16px;
   }
 
-  .pages{display:flex;gap:14px;flex-wrap:wrap;font-size:.74rem;}
-  .pages a{color:var(--ink-soft);text-decoration:underline;text-underline-offset:2px;}
-  .pages a.current{color:var(--brass-deep);font-weight:700;text-decoration:none;}
+  circle.mark{
+    fill:none;
+    stroke-width:2.5;
+    vector-effect:non-scaling-stroke;
+    pointer-events:none;
+  }
+  circle.mark.correct{stroke:var(--ok);fill:var(--ok-fill);fill-opacity:.55;}
+  circle.mark.revealed{stroke:var(--brass-deep);fill:var(--brass);fill-opacity:.45;}
+  circle.mark.wrong{stroke:var(--bad);fill:var(--bad-fill);fill-opacity:.6;}
+  text.mark-label{
+    font-family:"Work Sans",sans-serif;
+    font-weight:600;
+    fill:var(--ink);
+    text-anchor:middle;
+    paint-order:stroke;
+    stroke:var(--paper-raised);
+    stroke-width:3px;
+    stroke-linejoin:round;
+    vector-effect:non-scaling-stroke;
+    pointer-events:none;
+  }
 </style>
 
 <div class="app">
@@ -424,8 +443,9 @@
       <button data-mode="africa">18 · Afrika</button>
       <button data-mode="america">19 · Amerika</button>
       <button data-mode="river">12 · Řeka USA</button>
+      <button data-mode="populous">Nejlidnatější</button>
+      <button data-mode="smallest">Nejméně lidnaté</button>
     </nav>
-    <nav class="pages"><a href="index.html" class="current">Atlas</a><a href="nejlidnatejsi.html">16 nejlidnatějších</a><a href="nejmene-lidnate.html">10 nejméně lidnatých</a></nav>
     <div class="prompt-row">
       <div class="prompt" id="promptText">Načítám mapu…</div>
       <div class="progress" id="progressLabel"></div>
@@ -486,7 +506,9 @@ var CZ_NAMES = {
   "Lebanon":"Libanon","Angola":"Angola","Guyana":"Guyana","Guinea":"Guinea",
   "Costa Rica":"Kostarika","Bangladesh":"Bangladéš","Sri Lanka":"Srí Lanka",
   "Haiti":"Haiti","Panama":"Panama","Paraguay":"Paraguay","Suriname":"Surinam",
-  "Sierra Leone":"Sierra Leone"
+  "Sierra Leone":"Sierra Leone",
+  "Indonesia":"Indonésie","Pakistan":"Pákistán","Russia":"Rusko","Ethiopia":"Etiopie",
+  "Egypt":"Egypt","Vietnam":"Vietnam","Congo":"Kongo (Brazzaville)","Falkland Is.":"Falklandy"
 };
 
 var CAPITALS = [
@@ -514,6 +536,41 @@ var AFRICA_NOT = ["Honduras","Philippines","Kuwait","Lebanon","Guyana"];
 var AMERICA_POOL = ["Costa Rica","Bangladesh","Sri Lanka","Haiti","Panama","Paraguay","Guyana","Guinea","Suriname","Sierra Leone"];
 var AMERICA_NOT = ["Bangladesh","Sri Lanka","Guinea","Sierra Leone"];
 
+/* 16 nejlidnatějších států podle pracovního listu */
+var POPULOUS = [
+  {key:"India", label:"Indie", display:"Nové Dillí", answers:["nove dilli","dilli","delhi","new delhi","nove delhi","nove dehli","dehli"]},
+  {key:"China", label:"Čína", display:"Peking", answers:["peking","beijing"]},
+  {key:"United States of America", label:"USA", display:"Washington, D.C.", answers:["washington","washington dc"]},
+  {key:"Indonesia", label:"Indonésie", display:"Jakarta", answers:["jakarta"]},
+  {key:"Pakistan", label:"Pákistán", display:"Islámábád", answers:["islamabad"]},
+  {key:"Nigeria", label:"Nigérie", display:"Abuja", answers:["abuja","abudza"]},
+  {key:"Brazil", label:"Brazílie", display:"Brasília", answers:["brasilia","brazilia"]},
+  {key:"Bangladesh", label:"Bangladéš", display:"Dháka", answers:["dhaka","daka"]},
+  {key:"Russia", label:"Rusko", display:"Moskva", answers:["moskva","moscow"]},
+  {key:"Ethiopia", label:"Etiopie", display:"Addis Abeba", answers:["addis abeba","addis ababa","adis abeba"]},
+  {key:"Mexico", label:"Mexiko", display:"Ciudad de México", answers:["ciudad de mexico","mexico city","mexiko city"]},
+  {key:"Japan", label:"Japonsko", display:"Tokio", answers:["tokio","tokyo"]},
+  {key:"Egypt", label:"Egypt", display:"Káhira", answers:["kahira","cairo"]},
+  {key:"Philippines", label:"Filipíny", display:"Manila", answers:["manila"]},
+  {key:"Dem. Rep. Congo", label:"Kongo (Kinshasa)", display:"Kinshasa", answers:["kinshasa","kinsasa"]},
+  {key:"Vietnam", label:"Vietnam", display:"Hanoj", answers:["hanoj","hanoi"]}
+];
+
+/* 10 nejméně lidnatých států; poloha = střed území, klikne se na místo */
+var SMALLEST = [
+  {key:"vatikan", label:"Vatikán", lon:12.4534, lat:41.9029, capital:"Vatikán"},
+  {key:"niue", label:"Niue", lon:-169.867, lat:-19.055, capital:"Alofi"},
+  {key:"tokelau", label:"Tokelau", lon:-171.85, lat:-9.17, capital:null},
+  {key:"falklandy", label:"Falklandy", lon:-59.5, lat:-51.75, capital:"Stanley"},
+  {key:"montserrat", label:"Montserrat", lon:-62.19, lat:16.74, capital:"Brades (Plymouth je zničený sopkou)"},
+  {key:"helena", label:"Svatá Helena", lon:-5.71, lat:-15.96, capital:"Jamestown"},
+  {key:"spm", label:"Saint-Pierre a Miquelon", lon:-56.33, lat:46.83, capital:"Saint-Pierre"},
+  {key:"tuvalu", label:"Tuvalu", lon:179.0, lat:-8.5, capital:"Funafuti"},
+  {key:"wallis", label:"Wallis a Futuna", lon:-176.2, lat:-13.77, capital:"Mata-Utu"},
+  {key:"bartolomej", label:"Svatý Bartoloměj", lon:-62.83, lat:17.9, capital:"Gustavia"}
+];
+var HIT_RADIUS = 16;
+
 var RIVER_STATES = ["Minnesota","Wisconsin","Iowa","Illinois","Missouri","Kentucky","Tennessee","Arkansas","Mississippi","Louisiana"];
 
 function normalize(s){
@@ -529,6 +586,7 @@ var score = 0, total = 0;
 var svg = d3.select("#map");
 var gWorld = svg.append("g").attr("class","world-layer");
 var gStates = svg.append("g").attr("class","states-layer").style("display","none");
+var gMarks = svg.append("g").attr("class","marks-layer");
 var landPaths, statePaths;
 var projection, path, statesProjection, statesPath;
 var zoomBehavior;
@@ -545,6 +603,8 @@ var findLayer = "world";
 var findLocked = false;
 var findOnEachFound = null;
 var findOnDone = null;
+
+var smQueue = [], smIdx = 0, smFound = 0, smRevealed = 0, smLocked = true;
 
 var promptText = document.getElementById("promptText");
 var subPrompt = document.getElementById("subPrompt");
@@ -579,7 +639,12 @@ function start(saved){
     worldFeatures = topojson.feature(worldTopo, worldTopo.objects.countries).features;
     statesFeatures = topojson.feature(statesTopo, statesTopo.objects.states).features;
     buildMap();
-    setMode("capitals");
+    var m0 = "capitals";
+    try{
+      var q = new URLSearchParams(location.search).get("mode");
+      if(["capitals","africa","america","river","populous","smallest"].indexOf(q) >= 0) m0 = q;
+    }catch(e){}
+    setMode(m0);
   }).catch(function(err){
     promptText.textContent = "Chyba při načítání mapy.";
     console.error(err);
@@ -636,12 +701,15 @@ function buildMap(){
     .on("click", onStateClick);
 
   zoomBehavior = d3.zoom()
-    .scaleExtent([1,10])
+    .scaleExtent([1,60])
     .on("zoom", function(ev){
       gWorld.attr("transform", ev.transform);
       gStates.attr("transform", ev.transform);
+      gMarks.attr("transform", ev.transform);
+      scaleMarks(ev.transform.k);
     });
   svg.call(zoomBehavior);
+  svg.on("click", onMapClick);
 
   document.getElementById("zoomIn").onclick = function(){ svg.transition().duration(200).call(zoomBehavior.scaleBy, 1.6); };
   document.getElementById("zoomOut").onclick = function(){ svg.transition().duration(200).call(zoomBehavior.scaleBy, 0.625); };
@@ -713,6 +781,8 @@ function setMode(m){
   endCard.classList.remove("show");
   landPaths.classed("correct wrong revealed",false);
   statePaths.classed("correct wrong revealed",false);
+  gMarks.selectAll("*").remove();
+  smLocked = true;
   svg.interrupt().transition().duration(300).call(zoomBehavior.transform, d3.zoomIdentity);
   answerPanel.hidden = false;
   answerRow.hidden = true;
@@ -729,6 +799,10 @@ function setMode(m){
     startCountryFind("america", AMERICA_POOL, AMERICA_NOT);
   } else if(m==="river"){
     setupRiverNameStep();
+  } else if(m==="populous"){
+    startPopulous();
+  } else if(m==="smallest"){
+    startSmallest();
   }
 }
 
@@ -771,7 +845,7 @@ function showFindTarget(){
   var t = findQueue[findIdx];
   progressLabel.textContent = (findIdx+1)+" / "+findQueue.length;
   promptText.innerHTML = "Klikni na: <span class='target'>"+t.label+"</span>";
-  if(mode==="capitals") subPrompt.textContent = "Pak napiš hlavní město.";
+  if(mode==="capitals" || mode==="populous") subPrompt.textContent = "Pak napiš hlavní město.";
   else subPrompt.textContent = "Nevíš-li, nech si stát ukázat.";
 }
 
@@ -799,6 +873,10 @@ function onFindMatch(name){
 }
 
 revealBtn.addEventListener("click", function(){
+  if(mode==="smallest"){
+    if(!smLocked) smResolve(true);
+    return;
+  }
   if(findLocked) return;
   resolveFind(true);
 });
@@ -812,14 +890,25 @@ function showNextUI(advance){
 /* ---------- mode: capitals (Q13) ---------- */
 
 function startCapitals(){
-  var queue = shuffle(CAPITALS.slice()).map(function(c){
-    return { key:c.country, label:CZ_NAMES[c.country], capital:c };
+  startCapitalQuiz(CAPITALS.map(function(c){
+    return { key:c.country, label:CZ_NAMES[c.country], answers:c.answers, display:c.display };
+  }), "Hlavní města hotova!", "všech # států ze cvičení 13");
+}
+
+function startPopulous(){
+  startCapitalQuiz(POPULOUS, "Nejlidnatější státy hotovy!", "všech # nejlidnatějších států");
+}
+
+function startCapitalQuiz(entries, title, what){
+  var queue = shuffle(entries.slice()).map(function(c){
+    return { key:c.key, label:c.label, capital:c };
   });
   startFind(queue, "world", {
     onEachFound: function(t, revealed, advance){
       answerRow.hidden = false;
       answerLabel.textContent = "Hlavní město státu "+t.label+"?";
       answerInput.value = "";
+      answerInput.placeholder = "Hlavní město…";
       answerInput.focus();
       activeTextChecker = function(){
         var val = normalize(answerInput.value);
@@ -835,7 +924,7 @@ function startCapitals(){
       };
     },
     onDone: function(found, revealed, n){
-      showEnd("Hlavní města hotova!", "Prošel/prošla jsi všech "+n+" států ze cvičení 13. Sám/sama jsi našel/našla "+found+", "+revealed+" ti Atlas ukázal.");
+      showEnd(title, "Prošel/prošla jsi "+what.replace("#", n)+". Sám/sama jsi našel/našla "+found+", "+revealed+" ti Atlas ukázal.");
     }
   });
 }
@@ -921,10 +1010,123 @@ function startRiverStatesStep(){
   });
 }
 
+/* ---------- mode: smallest territories (click on the place) ---------- */
+
+function scaleMarks(k){
+  gMarks.selectAll("circle").attr("r", function(){ return (+this.getAttribute("data-r")) / k; });
+  gMarks.selectAll("text")
+    .attr("font-size", 12 / k)
+    .attr("y", function(){ return (+this.getAttribute("data-py")) - 18 / k; });
+}
+
+function drawMark(p, cls, r, label){
+  var c = gMarks.append("circle")
+    .attr("class","mark " + cls)
+    .attr("cx", p[0]).attr("cy", p[1])
+    .attr("data-r", r);
+  if(label){
+    gMarks.append("text")
+      .attr("class","mark-label")
+      .attr("x", p[0]).attr("data-py", p[1])
+      .text(label);
+  }
+  scaleMarks(d3.zoomTransform(svg.node()).k);
+  return c;
+}
+
+function zoomToPoint(p, k){
+  svg.interrupt().transition().duration(600).call(
+    zoomBehavior.transform,
+    d3.zoomIdentity.translate(width/2 - k*p[0], height/2 - k*p[1]).scale(k)
+  );
+}
+
+function startSmallest(){
+  smQueue = shuffle(SMALLEST.slice());
+  smIdx = 0; smFound = 0; smRevealed = 0;
+  showSmallTarget();
+}
+
+function showSmallTarget(){
+  smLocked = false;
+  gMarks.selectAll("*").remove();
+  nextRow.hidden = true;
+  answerRow.hidden = true;
+  feedback.classList.remove("show","ok","bad");
+
+  if(smIdx >= smQueue.length){
+    findRow.hidden = true;
+    smLocked = true;
+    showEnd("Nejméně lidnaté hotovy!", "Prošel/prošla jsi všech "+smQueue.length+" nejméně lidnatých států. Sám/sama jsi trefil/trefila "+smFound+", "+smRevealed+" ti Atlas ukázal.");
+    return;
+  }
+  var t = smQueue[smIdx];
+  findRow.hidden = false;
+  answerLabel.textContent = "Přibliž mapu a klikni na místo, kde stát leží";
+  progressLabel.textContent = (smIdx+1)+" / "+smQueue.length;
+  promptText.innerHTML = "Klikni na: <span class='target'>"+t.label+"</span>";
+  subPrompt.textContent = "Většina z nich je moc malá na hranice v mapě. Klikni do místa, kde leží. Nevíš-li, nech si ho ukázat.";
+}
+
+function smResolve(wasRevealed){
+  var t = smQueue[smIdx];
+  smLocked = true;
+  findRow.hidden = true;
+  if(wasRevealed) smRevealed++; else smFound++;
+  total++; if(!wasRevealed) score++;
+  updateScore(); persist();
+
+  var p = projection([t.lon, t.lat]);
+  gMarks.selectAll("*").remove();
+  drawMark(p, wasRevealed ? "revealed" : "correct", 14, t.label);
+  zoomToPoint(p, 12);
+
+  var cap = t.capital
+    ? "Hlavní město: <b>"+t.capital+"</b>"
+    : "Hlavní město nemá <span class='answer-reveal'>(každý atol má vlastní správní centrum)</span>";
+  feedback.classList.remove("bad");
+  feedback.classList.add("show","ok");
+  feedback.innerHTML = (wasRevealed ? "Tady je: <b>"+t.label+"</b>. " : "Správně! ✓ ") + cap;
+  showNextUI(function(){ smIdx++; showSmallTarget(); });
+}
+
+function onMapClick(ev){
+  if(mode !== "smallest" || smLocked) return;
+  var t = smQueue[smIdx];
+  if(!t) return;
+  var pt = d3.pointer(ev, svg.node());
+  var tr = d3.zoomTransform(svg.node());
+  var mp = [(pt[0] - tr.x) / tr.k, (pt[1] - tr.y) / tr.k];
+
+  function screenDist(o){
+    var q = projection([o.lon, o.lat]);
+    return Math.hypot(q[0] - mp[0], q[1] - mp[1]) * tr.k;
+  }
+  var dCur = screenDist(t);
+  var nearest = SMALLEST.every(function(o){ return o === t || screenDist(o) >= dCur; });
+  if(dCur <= HIT_RADIUS && nearest){
+    smResolve(false);
+    return;
+  }
+
+  var wrong = drawMark(mp, "wrong", 10, null);
+  setTimeout(function(){ wrong.remove(); }, 600);
+
+  var msg = "Vedle.";
+  var ll = projection.invert(mp);
+  if(ll){
+    var km = Math.round(d3.geoDistance(ll, [t.lon, t.lat]) * 6371 / 10) * 10;
+    msg = "Vedle — jsi zhruba " + km.toLocaleString("cs-CZ") + " km od cíle.";
+  }
+  feedback.classList.remove("ok");
+  feedback.classList.add("show","bad");
+  feedback.textContent = msg;
+}
+
 /* ---------- shared click / feedback ---------- */
 
 function onLandClick(ev, d){
-  if(mode==="river") return;
+  if(mode==="river" || mode==="smallest") return;
   if(findLocked) return;
   var name = d.properties.name;
   if(!onFindMatch(name)){
