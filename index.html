@@ -407,6 +407,10 @@
     color:var(--ink-soft);
     margin:0 0 16px;
   }
+
+  .pages{display:flex;gap:14px;flex-wrap:wrap;font-size:.74rem;}
+  .pages a{color:var(--ink-soft);text-decoration:underline;text-underline-offset:2px;}
+  .pages a.current{color:var(--brass-deep);font-weight:700;text-decoration:none;}
 </style>
 
 <div class="app">
@@ -421,6 +425,7 @@
       <button data-mode="america">19 · Amerika</button>
       <button data-mode="river">12 · Řeka USA</button>
     </nav>
+    <nav class="pages"><a href="index.html" class="current">Atlas</a><a href="nejlidnatejsi.html">16 nejlidnatějších</a><a href="nejmene-lidnate.html">10 nejméně lidnatých</a></nav>
     <div class="prompt-row">
       <div class="prompt" id="promptText">Načítám mapu…</div>
       <div class="progress" id="progressLabel"></div>
