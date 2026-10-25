@@ -444,6 +444,7 @@
       <button data-mode="america">19 · Amerika</button>
       <button data-mode="river">12 · Řeka USA</button>
       <button data-mode="population">Lidnatost</button>
+      <button data-mode="smallest">Nejméně lidnaté</button>
     </nav>
     <div class="prompt-row">
       <div class="prompt" id="promptText">Načítám mapu…</div>
@@ -643,8 +644,8 @@ function start(saved){
     var m0 = "capitals";
     try{
       var q = new URLSearchParams(location.search).get("mode");
-      if(q === "populous" || q === "smallest") q = "population";
-      if(["capitals","africa","america","river","population"].indexOf(q) >= 0) m0 = q;
+      if(q === "populous") q = "population";
+      if(["capitals","africa","america","river","population","smallest"].indexOf(q) >= 0) m0 = q;
     }catch(e){}
     setMode(m0);
   }).catch(function(err){
@@ -805,6 +806,8 @@ function setMode(m){
     setupRiverNameStep();
   } else if(m==="population"){
     startPopulation();
+  } else if(m==="smallest"){
+    startSmallest();
   }
 }
 
@@ -1068,7 +1071,7 @@ function showSmallTarget(){
     findRow.hidden = true;
     smLocked = true;
     var a = popA ? "Nejlidnatější: sám/sama jsi našel/našla "+popA.found+" z "+popA.n+", "+popA.revealed+" ti Atlas ukázal. " : "";
-    showEnd("Lidnatost hotova!", a + "Nejméně lidnaté: sám/sama jsi trefil/trefila "+smFound+" z "+smQueue.length+", "+smRevealed+" ti Atlas ukázal.");
+    showEnd(popA ? "Lidnatost hotova!" : "Nejméně lidnaté hotovy!", a + "Nejméně lidnaté: sám/sama jsi trefil/trefila "+smFound+" z "+smQueue.length+", "+smRevealed+" ti Atlas ukázal.");
     return;
   }
   var t = smQueue[smIdx];
