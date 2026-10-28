@@ -445,6 +445,7 @@
       <button data-mode="river">12 · Řeka USA</button>
       <button data-mode="population">Lidnatost</button>
       <button data-mode="smallest">Nejméně lidnaté</button>
+      <button data-mode="density">Hustota</button>
     </nav>
     <div class="prompt-row">
       <div class="prompt" id="promptText">Načítám mapu…</div>
@@ -508,7 +509,7 @@ var CZ_NAMES = {
   "Haiti":"Haiti","Panama":"Panama","Paraguay":"Paraguay","Suriname":"Surinam",
   "Sierra Leone":"Sierra Leone",
   "Indonesia":"Indonésie","Pakistan":"Pákistán","Russia":"Rusko","Ethiopia":"Etiopie",
-  "Egypt":"Egypt","Vietnam":"Vietnam","Iran":"Írán","Congo":"Kongo (Brazzaville)","Falkland Is.":"Falklandy"
+  "Egypt":"Egypt","Vietnam":"Vietnam","Iran":"Írán","Greenland":"Grónsko","Mongolia":"Mongolsko","W. Sahara":"Západní Sahara","Namibia":"Namibie","Iceland":"Island","Libya":"Libye","Mauritania":"Mauritánie","Palestine":"Palestina","Taiwan":"Tchaj-wan","Congo":"Kongo (Brazzaville)","Falkland Is.":"Falklandy"
 };
 
 var CAPITALS = [
@@ -572,6 +573,45 @@ var SMALLEST = [
 ];
 var HIT_RADIUS = 16;
 
+/* hustota obyvatelstva: kind "poly" = klik na stát v mapě (key = název v mapě), "point" = klik do místa (lon/lat) */
+var DENSITY_LOW = [
+  {key:"Greenland", kind:"poly", label:"Grónsko", capital:"Nuuk", answers:["nuuk","godthab"]},
+  {key:"falklandy", kind:"point", label:"Falklandské ostrovy", lon:-59.5, lat:-51.75, capital:"Port Stanley", answers:["port stanley","stanley"]},
+  {key:"Mongolia", kind:"poly", label:"Mongolsko", capital:"Ulánbátar", answers:["ulanbatar","ulaanbaatar","ulan bator","ulanbator"]},
+  {key:"W. Sahara", kind:"poly", label:"Západní Sahara", capital:"Laâyoune (Laájún)", answers:["laajun","laayoune","el aaiun","aaiun","laajoun"]},
+  {key:"Australia", kind:"poly", label:"Austrálie", capital:"Canberra", answers:["canberra"]},
+  {key:"Namibia", kind:"poly", label:"Namibie", capital:"Windhoek", answers:["windhoek","windhuk"]},
+  {key:"frguyana", kind:"point", label:"Francouzská Guyana", lon:-53.1, lat:3.9, capital:"Cayenne", answers:["cayenne","cayenna","kajenna"]},
+  {key:"Iceland", kind:"poly", label:"Island", capital:"Reykjavík", answers:["reykjavik","rejkjavik"]},
+  {key:"Suriname", kind:"poly", label:"Surinam", capital:"Paramaribo", answers:["paramaribo"]},
+  {key:"Guyana", kind:"poly", label:"Guyana", capital:"Georgetown", answers:["georgetown","george town"]},
+  {key:"Libya", kind:"poly", label:"Libye", capital:"Tripolis", answers:["tripolis","tripoli"]},
+  {key:"Canada", kind:"poly", label:"Kanada", capital:"Ottawa", answers:["ottawa"]},
+  {key:"Botswana", kind:"poly", label:"Botswana", capital:"Gaborone", answers:["gaborone"]},
+  {key:"Mauritania", kind:"poly", label:"Mauritánie", capital:"Nuakšott", answers:["nuaksott","nuakchott","nouakchott"]}
+];
+var DENSITY_HIGH = [
+  {key:"monako", kind:"point", label:"Monako", lon:7.4246, lat:43.7384, capital:"Monako", answers:["monako","monaco"]},
+  {key:"macao", kind:"point", label:"Macao", lon:113.55, lat:22.17, capital:null},
+  {key:"singapur", kind:"point", label:"Singapur", lon:103.82, lat:1.35, capital:"Singapur", answers:["singapur","singapore"]},
+  {key:"hongkong", kind:"point", label:"Hongkong", lon:114.17, lat:22.32, capital:null},
+  {key:"gibraltar", kind:"point", label:"Gibraltar", lon:-5.35, lat:36.14, capital:null},
+  {key:"bahrajn", kind:"point", label:"Bahrajn", lon:50.55, lat:26.07, capital:"Manáma", answers:["manama"]},
+  {key:"maledivy", kind:"point", label:"Maledivy", lon:73.5, lat:3.2, capital:"Male", answers:["male"]},
+  {key:"malta", kind:"point", label:"Malta", lon:14.4, lat:35.9, capital:"Valletta", answers:["valletta","la valletta"]},
+  {key:"Bangladesh", kind:"poly", label:"Bangladéš", capital:"Dháka", answers:["dhaka","daka"]},
+  {key:"stmartin", kind:"point", label:"Svatý Martin", lon:-63.05, lat:18.07, capital:null},
+  {key:"bermudy", kind:"point", label:"Bermudy", lon:-64.78, lat:32.3, capital:null},
+  {key:"vatikan2", kind:"point", label:"Vatikán", lon:12.4534, lat:41.9029, capital:"Vatikán", answers:["vatikan","vatican"]},
+  {key:"Palestine", kind:"poly", label:"Palestina", capital:"Jeruzalém", answers:["jeruzalem","jerusalem"]},
+  {key:"mayotte", kind:"point", label:"Mayotte", lon:45.17, lat:-12.83, capital:null},
+  {key:"barbados", kind:"point", label:"Barbados", lon:-59.55, lat:13.19, capital:"Bridgetown", answers:["bridgetown"]},
+  {key:"Taiwan", kind:"poly", label:"Tchaj-wan", capital:"Tchaj-pej", answers:["tchaj-pej","tchaj pej","tchajpej","taipei","tchaj-pei"]},
+  {key:"mauricius", kind:"point", label:"Mauricius", lon:57.55, lat:-20.25, capital:"Port Louis", answers:["port louis","portlouis"]},
+  {key:"nauru2", kind:"point", label:"Nauru", lon:166.93, lat:-0.52, capital:"Yaren", answers:["yaren"]}
+];
+var DEN_POINTS = DENSITY_LOW.concat(DENSITY_HIGH).filter(function(t){ return t.kind === "point"; });
+
 var RIVER_STATES = ["Minnesota","Wisconsin","Iowa","Illinois","Missouri","Kentucky","Tennessee","Arkansas","Mississippi","Louisiana"];
 
 function normalize(s){
@@ -607,6 +647,7 @@ var findOnDone = null;
 
 var smQueue = [], smIdx = 0, smFound = 0, smRevealed = 0, smLocked = true;
 var smActive = false, popA = null;
+var denQueue = [], denIdx = 0, denFound = 0, denRevealed = 0, denLocked = true, denActive = false, denPartIdx = 0, denParts = [], denStats = [];
 
 var promptText = document.getElementById("promptText");
 var subPrompt = document.getElementById("subPrompt");
@@ -645,7 +686,7 @@ function start(saved){
     try{
       var q = new URLSearchParams(location.search).get("mode");
       if(q === "populous") q = "population";
-      if(["capitals","africa","america","river","population","smallest"].indexOf(q) >= 0) m0 = q;
+      if(["capitals","africa","america","river","population","smallest","density"].indexOf(q) >= 0) m0 = q;
     }catch(e){}
     setMode(m0);
   }).catch(function(err){
@@ -787,6 +828,8 @@ function setMode(m){
   gMarks.selectAll("*").remove();
   smLocked = true;
   smActive = false;
+  denActive = false;
+  denLocked = true;
   popA = null;
   svg.interrupt().transition().duration(300).call(zoomBehavior.transform, d3.zoomIdentity);
   answerPanel.hidden = false;
@@ -808,6 +851,8 @@ function setMode(m){
     startPopulation();
   } else if(m==="smallest"){
     startSmallest();
+  } else if(m==="density"){
+    startDensity();
   }
 }
 
@@ -878,6 +923,10 @@ function onFindMatch(name){
 }
 
 revealBtn.addEventListener("click", function(){
+  if(denActive){
+    if(!denLocked) resolveDen(true);
+    return;
+  }
   if(smActive){
     if(!smLocked) smResolve(true);
     return;
@@ -1105,6 +1154,7 @@ function smResolve(wasRevealed){
 }
 
 function onMapClick(ev){
+  if(denActive){ onDenClick(ev); return; }
   if(!smActive || smLocked) return;
   var t = smQueue[smIdx];
   if(!t) return;
@@ -1137,10 +1187,163 @@ function onMapClick(ev){
   feedback.textContent = msg;
 }
 
+/* ---------- mode: population density (Hustota) ---------- */
+
+function startDensity(){
+  denActive = true;
+  activeTextChecker = null;
+  denParts = [
+    { name:"Nízká hustota", items:DENSITY_LOW },
+    { name:"Vysoká hustota", items:DENSITY_HIGH }
+  ];
+  denStats = [];
+  denPartIdx = 0;
+  startDenPart();
+}
+
+function startDenPart(){
+  denQueue = shuffle(denParts[denPartIdx].items.slice());
+  denIdx = 0; denFound = 0; denRevealed = 0;
+  showDenTarget();
+}
+
+function showDenTarget(){
+  denLocked = false;
+  activeTextChecker = null;
+  gMarks.selectAll("*").remove();
+  landPaths.classed("correct wrong revealed", false);
+  svg.interrupt().transition().duration(300).call(zoomBehavior.transform, d3.zoomIdentity);
+  answerRow.hidden = true;
+  nextRow.hidden = true;
+  feedback.classList.remove("show","ok","bad");
+
+  if(denIdx >= denQueue.length){
+    findRow.hidden = true;
+    denLocked = true;
+    denStats.push({ name:denParts[denPartIdx].name, found:denFound, revealed:denRevealed, n:denQueue.length });
+    if(denPartIdx + 1 < denParts.length){
+      denPartIdx++;
+      startDenPart();
+      return;
+    }
+    var txt = denStats.map(function(s){
+      return s.name+": sám/sama jsi našel/našla "+s.found+" z "+s.n+", "+s.revealed+" ti Atlas ukázal.";
+    }).join(" ");
+    showEnd("Hustota hotova!", txt);
+    return;
+  }
+  var t = denQueue[denIdx];
+  var partName = denParts[denPartIdx].name;
+  findRow.hidden = false;
+  answerLabel.textContent = t.kind === "point" ? "Přibliž mapu a klikni na místo, kde leží" : "Klikni na správný stát na mapě";
+  progressLabel.textContent = partName+" · "+(denIdx+1)+" / "+denQueue.length;
+  promptText.innerHTML = "Klikni na: <span class='target'>"+t.label+"</span>";
+  var sub = t.kind === "point"
+    ? "Malé území bez hranic v mapě: přibliž mapu a klikni do místa, kde leží."
+    : "Najdi ho na mapě.";
+  subPrompt.textContent = sub + (t.capital ? " Pak napiš hlavní město." : "") + " Nevíš-li, nech si ho ukázat.";
+}
+
+function resolveDen(wasRevealed){
+  var t = denQueue[denIdx];
+  denLocked = true;
+  findRow.hidden = true;
+  if(wasRevealed) denRevealed++; else denFound++;
+  gMarks.selectAll("*").remove();
+
+  if(t.kind === "poly"){
+    var sel = landPaths.filter(function(d){ return d.properties.name === t.key; });
+    sel.classed(wasRevealed ? "revealed" : "correct", true);
+    var f = sel.data()[0];
+    if(f) zoomToBounds(path, f, 120);
+  } else {
+    var p = projection([t.lon, t.lat]);
+    drawMark(p, wasRevealed ? "revealed" : "correct", 14, t.label);
+    zoomToPoint(p, 12);
+  }
+  var advance = function(){ denIdx++; showDenTarget(); };
+
+  if(t.capital){
+    answerRow.hidden = false;
+    answerLabel.textContent = "Hlavní město: "+t.label+"?";
+    answerInput.value = "";
+    answerInput.placeholder = "Hlavní město…";
+    answerInput.focus();
+    activeTextChecker = function(){
+      var val = normalize(answerInput.value);
+      var ok = t.answers.some(function(a){ return normalize(a) === val; });
+      total++; if(ok) score++;
+      updateScore(); persist();
+      feedback.classList.add("show", ok ? "ok" : "bad");
+      feedback.innerHTML = ok
+        ? "Správně! ✓"
+        : "Špatně — správně je <span class='answer-reveal'>"+t.capital+"</span>";
+      answerRow.hidden = true;
+      activeTextChecker = null;
+      showNextUI(advance);
+    };
+  } else {
+    total++; if(!wasRevealed) score++;
+    updateScore(); persist();
+    feedback.classList.add("show","ok");
+    feedback.innerHTML = (wasRevealed ? "Tady je: <b>"+t.label+"</b>. " : "Správně! ✓ ") +
+      "<span class='answer-reveal'>(v tabulce k tomuto území hlavní město není)</span>";
+    showNextUI(advance);
+  }
+}
+
+function onDenClick(ev){
+  if(denLocked) return;
+  var t = denQueue[denIdx];
+  if(!t) return;
+  var pt = d3.pointer(ev, svg.node());
+  var tr = d3.zoomTransform(svg.node());
+  var mp = [(pt[0] - tr.x) / tr.k, (pt[1] - tr.y) / tr.k];
+  var datum = ev.target && ev.target.__data__;
+  var clickedName = datum && datum.properties ? datum.properties.name : null;
+
+  if(t.kind === "poly"){
+    if(clickedName === t.key){ resolveDen(false); return; }
+  } else {
+    var dist = function(o){
+      var q = projection([o.lon, o.lat]);
+      return Math.hypot(q[0] - mp[0], q[1] - mp[1]) * tr.k;
+    };
+    var dCur = dist(t);
+    var nearest = DEN_POINTS.every(function(o){ return o === t || dist(o) >= dCur; });
+    if(dCur <= HIT_RADIUS && nearest){ resolveDen(false); return; }
+  }
+
+  var wrong = drawMark(mp, "wrong", 10, null);
+  setTimeout(function(){ wrong.remove(); }, 600);
+  if(clickedName && t.kind === "poly"){
+    flashWrongSel(landPaths.filter(function(x){ return x.properties.name === clickedName; }));
+  }
+  var target = null;
+  if(t.kind === "point"){
+    target = [t.lon, t.lat];
+  } else {
+    var tf = landPaths.filter(function(x){ return x.properties.name === t.key; }).data()[0];
+    if(tf) target = d3.geoCentroid(tf);
+  }
+  var msg = "Vedle";
+  if(clickedName) msg += " (klikl jsi na: " + (CZ_NAMES[clickedName] || clickedName) + ")";
+  var ll = projection.invert(mp);
+  if(ll && target){
+    var km = Math.round(d3.geoDistance(ll, target) * 6371 / 10) * 10;
+    msg += " — jsi zhruba " + km.toLocaleString("cs-CZ") + " km od cíle.";
+  } else {
+    msg += ".";
+  }
+  feedback.classList.remove("ok");
+  feedback.classList.add("show","bad");
+  feedback.textContent = msg;
+}
+
 /* ---------- shared click / feedback ---------- */
 
 function onLandClick(ev, d){
-  if(mode==="river" || smActive) return;
+  if(mode==="river" || smActive || denActive) return;
   if(findLocked) return;
   var name = d.properties.name;
   if(!onFindMatch(name)){
